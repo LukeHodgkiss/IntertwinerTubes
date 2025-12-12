@@ -64,7 +64,9 @@ end
 function inner_product(v1::Vec, v2::Vec)
     if v1.subalgebra == v2.subalgebra
         #@show v2, v1
-        return dot(conj.(v2.vector), v1.vector)
+        #return dot(conj.(v2.vector), v1.vector)
+        return dot(v2.vector, v1.vector)
+
         #return dot(reshape(v1.vector, 1, :)', reshape(v2.vector, :, 1)) #reshape(v.vector, :, 1)
         #return dot(reshape(v1.vector, :, 1)', reshape(v2.vector, :, 1)) #reshape(v.vector, :, 1)
     else
@@ -76,14 +78,18 @@ end
 function inner_product(v1::Vec, v2::AlgebraVec)
     vec2 = get(v2.vecs, v1.subalgebra, nothing)
     vec2 === nothing && return 0.0 + 0im
-    return dot(conj.(vec2.vector), v1.vector)
+    #return dot(conj.(vec2.vector), v1.vector)
+    return dot(vec2.vector, v1.vector)
+
 end
 
 #  AlgebraVec – Vec
 function inner_product(v1::AlgebraVec, v2::Vec)
     vec1 = get(v1.vecs, v2.subalgebra, nothing)
     vec1 === nothing && return 0.0 + 0im
-    return dot(conj.(v2.vector), vec1.vector)
+    #return dot(conj.(v2.vector), vec1.vector)
+    return dot(v2.vector, vec1.vector)
+
 end
 
 #  AlgebraVec – AlgebraVec

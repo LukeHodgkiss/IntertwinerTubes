@@ -19,7 +19,7 @@ using .FSymbolTools
 tuple_to_index(tup::NTuple, shape::NTuple) = LinearIndices(shape)[tup...]
 index_to_tuple(idx::Int, shape::NTuple) = Tuple(CartesianIndices(shape)[idx])
 
-function remove_zeros(sparse_tensor::SparseArray; tol=1e-12)
+function remove_zeros(sparse_tensor::SparseArray; tol=1e-9)
     mask = abs.(sparse_tensor.nzval) .>= tol
     rows, cols = findnz(sparse_tensor)[1:2]
     return sparse(rows[mask], cols[mask], sparse_tensor.nzval[mask], size(sparse_tensor,1), size(sparse_tensor,2))

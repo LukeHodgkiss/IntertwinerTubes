@@ -22,7 +22,7 @@ include("Saving_Stuff.jl")
 using .Saving_Stuff
 
 # Read in F-symbols
-"""
+#=
 vars = matread("Luke_F.mat")
 F = SparseArray{ComplexF64}(vars["F"])
 quantum_dims = vec(vars["dim"])
@@ -32,11 +32,10 @@ size_dict = Dict(:module_label => size(F, 1),
                  :fusion_label => size(F, 2),
                  :multiplicity_label => size(F)[end])
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
-"""
+=#
 
 # Haagerup example
 println("Reading in F symbol data")
-
 index_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_ind.csv"
 value_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_var.csv"
 
@@ -71,25 +70,32 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 
 println("Finished reading in F symbol data")
 
-
 # Create f_ijk sparse algebra
 fusion_rules_M = make_fusion_rules(F, size_dict)
 fusion_rules_N = make_fusion_rules(F, size_dict)
 tubes_ij = make_tubes_ij(fusion_rules_M, fusion_rules_N)
-f_ijk_sparse = make_f_ijk_sparse(F, F, quantum_dims, size_dict, tubes_ij)
+f_ijk_sparse = make_f_ijk_sparse(F, conj!(F), quantum_dims, size_dict, tubes_ij)
 
 
 #dimension_dict = compute_dim_dict(size_dict, tubes_ij)
 dimension_dict = make_dim_dict(size_dict, tubes_ij)
 N_diag_blocks = size_dict[:module_label_N]*size_dict[:module_label_M]
-d_algebra_squared = N_diag_blocks*N_diag_blocks
+#d_algebra_squared = 27863#N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
+d_algebra_squared = 27863  #N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra_squared, dimension_dict, f_ijk_sparse)
 
 #@show f_ijk_sparse(1,1,1)
 
 # Calculate idempotents
 @time idempotents_dict = find_idempotents(tubealgebra)
-println(idempotents_dict)
+for irrep in idempotents_dict
+    println("Irrep has size: $(length(irrep))")
+    for (ij, proj) in irrep
+        println(" $(ij) ")
+    end
+
+end
+#println(size(irrep) for irrep in idempotents_dict)
 
 #ω = construct_irreps(tubealgebra, idempotents_dict, size_dict, tubes_ij, quantum_dims)
 #save_ω(ω)
@@ -98,3 +104,8 @@ println(idempotents_dict)
 #save_ω(U)
 
 end # Module
+#=
+Laurens, do you already have the fusion rules when you compute this stuff?
+
+Should I just compute nz elements first?
+=#
