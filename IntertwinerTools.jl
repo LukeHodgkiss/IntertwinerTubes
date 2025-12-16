@@ -126,8 +126,8 @@ function make_tubes_ij(fusion_rules_M, fusion_rules_N)
         common_Y = sort(collect(intersect(keys(nonzero_N), keys(nonzero_M))))
 
         for Y in common_Y
-            vals_N = sort(nonzero_N[Y])  
-            vals_M = sort(nonzero_M[Y]) 
+            vals_N = sort(nonzero_N[Y]) # Multiplicity inxed associated to N-module fusion
+            vals_M = sort(nonzero_M[Y]) # Multiplicity inxed associated to M-module fusion
 
             # Iterate over all pairs in lexicographic order (ensured by sorting)
             for (a, b) in Iterators.product(vals_N, vals_M)

@@ -15,14 +15,53 @@ using .SparseAlgebraObjects: TubeAlgebra, random_left_linear_combination_ijk, ra
 include("F_symbolTools.jl")
 using .FSymbolTools
 include("IntertwinerTools.jl")
-using .IntertwinerTools     
+using .IntertwinerTools
 include("Idempotents.jl")
 using .Idempotents: find_idempotents
 include("Saving_Stuff.jl")
 using .Saving_Stuff
 
-# Read in F-symbols
+# Read in F-symbol
+
+println("Reading in F symbol data")
+
 #=
+# F Symbol Fibonnacci
+index_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_ind.csv"
+value_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_var.csv"
+
+df_index = CSV.read(index_file, DataFrame; header=false)
+df_var = CSV.read(value_file, DataFrame; header=false)
+
+F3_DOK = Dict{CartesianIndex{10}, ComplexF64}()
+
+for i in 1:nrow(df_index)
+    row_idx = df_index[i, :]
+    row_val = df_var[i, :]
+    
+    key = ntuple(j -> Int(row_idx[j]), 10)
+    var = complex(row_val[1], row_val[2])
+
+    F3_DOK[CartesianIndex(key)] = var
+end
+
+# Fib shape
+F3_shape = (2,4,4,2,2,4,2,2,1,2)
+size_dict = Dict(
+    :module_label      => F3_shape[1],
+    :module_label_N    => F3_shape[1],
+    :module_label_M    => F3_shape[1],
+    :fusion_label      => F3_shape[2],
+    :multiplicity_label=> F3_shape[end]
+)
+
+ϕ = (1+5^0.5)/2.0
+quantum_dims = [1,ϕ,ϕ, ϕ^2]
+N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
+
+
+# Rep A4 over Rep A4 Rep A4
 vars = matread("Luke_F.mat")
 F = SparseArray{ComplexF64}(vars["F"])
 quantum_dims = vec(vars["dim"])
@@ -35,7 +74,6 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 =#
 
 # Haagerup example
-println("Reading in F symbol data")
 index_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_ind.csv"
 value_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_var.csv"
 
@@ -68,6 +106,7 @@ quantum_dims = Float64[ 1.,  1.,  1.,  3.30277564,  3.30277564, 3.30277564,  1.,
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 
+
 println("Finished reading in F symbol data")
 
 # Create f_ijk sparse algebra
@@ -91,9 +130,8 @@ tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra_squared, dimension_dict, f_ij
 for irrep in idempotents_dict
     println("Irrep has size: $(length(irrep))")
     for (ij, proj) in irrep
-        println(" $(ij) ")
+        println("Projector $(ij) has shape $(size(proj)) ")
     end
-
 end
 #println(size(irrep) for irrep in idempotents_dict)
 
@@ -102,6 +140,13 @@ end
 
 #U = sparse_clebsch_gordon_coefficients(ω, quantum_dims)
 #save_ω(U)
+#=
+
+full_dimension_dict = compute_dim_dict(size_dict, tubes_ij)
+println(full_dimension_dict)
+
+println(dimension_dict(1,1))
+=#
 
 end # Module
 #=

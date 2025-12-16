@@ -304,12 +304,16 @@ function random_left_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=t
     block_basis = create_left_ijk_basis(t,i,j,k).basis
     #d_a, d_b, d_c = t.dimension_dict[(i,j,k)]
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
+
+    #@show i,j,k, d_a, d_b, d_c
     
-    x_a = 2.0*rand(rng, d_a).- 1
+    x_a = rand(d_a) .+ im .* rand(d_a)
+    #x_a = randn(ComplexF64, d_a)
+    #x_a = 2.0*rand(rng, d_a).- 1
     LX = sum(x_a[i] * block_basis[i] for i in eachindex(x_a))
     if isHermitian && i==j
-        LX += LX'
-        LX=Matrix(LX)
+        LX += conj!(LX')
+        LX=Matrix(LX)/2.0
     end
     SubAlgebraElementBlockL(i, j, k, LX)
 end

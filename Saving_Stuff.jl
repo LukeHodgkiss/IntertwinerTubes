@@ -18,9 +18,9 @@ end
 # Save f_ijk to csv
 function save_f_ijk(f_ijk_sparse)
     df = DataFrame(i=Int[], j=Int[], k=Int[], a=Int[], b=Int[], c=Int[], val=ComplexF64[])
-    for i in 1:16
-        for j in 1:16
-            for k in 1:16
+    for i in 1:4
+        for j in 1:4
+            for k in 1:4
                 for (I, val) in f_ijk_sparse(i,j,k).data
                     (a,b,c) = Tuple(I)
                     push!(df, (i,j,k,a,b,c, val))
@@ -29,7 +29,7 @@ function save_f_ijk(f_ijk_sparse)
         end
     end
     sorted_df = sort(df, [:i, :j, :k,:a, :b, :c])
-    CSV.write("f_ijk_sparse_output.csv", sorted_df)
+    CSV.write("f_ijk_sparse_output_Fib.csv", sorted_df)
 end
 
 # Save ω to CSV
