@@ -64,8 +64,8 @@ end
 function inner_product(v1::Vec, v2::Vec)
     if v1.subalgebra == v2.subalgebra
         #@show v2, v1
-        #return dot(conj.(v2.vector), v1.vector)
-        return dot(v2.vector, v1.vector)
+        return dot(conj.(v2.vector), v1.vector)
+        #return dot(v2.vector, v1.vector)
 
         #return dot(reshape(v1.vector, 1, :)', reshape(v2.vector, :, 1)) #reshape(v.vector, :, 1)
         #return dot(reshape(v1.vector, :, 1)', reshape(v2.vector, :, 1)) #reshape(v.vector, :, 1)
@@ -322,7 +322,9 @@ function random_right_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=
     block_basis = create_right_ijk_basis(t,i,j,k).basis
     #d_a, d_b, d_c = t.dimension_dict[(i,j,k)]
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
-    x_c = 2.0*rand(rng, d_c).- 1
+    #x_c = 2.0*rand(rng, d_c).- 1
+    x_c = rand(d_c) .+ im .* rand(d_c)
+
     x_b = rand(rng, d_b)
     x_a = rand(rng, d_a)
 

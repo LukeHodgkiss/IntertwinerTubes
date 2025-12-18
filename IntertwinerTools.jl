@@ -1,6 +1,6 @@
 module IntertwinerTools
 
-export make_fusion_rules, make_tubes_ij, make_f_ijk_sparse, compute_dim_dict, make_dim_dict, sparse_clebsch_gordon_coefficients #, construct_irreps
+export make_fusion_rules, make_tubes_ij, make_f_ijk_sparse, compute_dim_dict, is_associative, make_dim_dict, sparse_clebsch_gordon_coefficients #, construct_irreps
 
 using Base.Threads
 using SparseArrayKit
@@ -19,7 +19,7 @@ using .FSymbolTools
 tuple_to_index(tup::NTuple, shape::NTuple) = LinearIndices(shape)[tup...]
 index_to_tuple(idx::Int, shape::NTuple) = Tuple(CartesianIndices(shape)[idx])
 
-function remove_zeros(sparse_tensor::SparseArray; tol=1e-9)
+function remove_zeros(sparse_tensor::SparseArray; tol=1e-10)
     mask = abs.(sparse_tensor.nzval) .>= tol
     rows, cols = findnz(sparse_tensor)[1:2]
     return sparse(rows[mask], cols[mask], sparse_tensor.nzval[mask], size(sparse_tensor,1), size(sparse_tensor,2))
@@ -72,7 +72,6 @@ function make_fusion_rules_(F::SparseArray, size_dict::Dict)
         #key = (M2, M1)
         key = @SVector[M2, M1]
 
-
         if haskey(cache, key)
             return cache[key]
         end
@@ -94,7 +93,7 @@ function make_fusion_rules_(F::SparseArray, size_dict::Dict)
                 val = hom_space_view[Tuple(k)...]  
 
                 if abs(val) > tol
-                    @show alpha = k[1]
+                    alpha = k[1]
                     push!(get!(nonzero_M2M1, Y, Int[]), alpha)
                 end
             end
@@ -107,7 +106,7 @@ function make_fusion_rules_(F::SparseArray, size_dict::Dict)
     return fusion_rules
 end
 
-# --- Tubes Factory ---function make_tubes_ij(fusion_rules_M, fusion_rules_N)
+# --- Tubes Factory ---
 function make_tubes_ij(fusion_rules_M, fusion_rules_N)
     cache = Dict{Tuple{Int,Int,Int,Int}, Dict{Tuple{Int, Int, Int}, Int}}()
 
@@ -136,16 +135,6 @@ function make_tubes_ij(fusion_rules_M, fusion_rules_N)
             end
         end
 
-        """for Y in common_keys
-            vals_N = nonzero_N[Y]
-            vals_M = nonzero_M[Y]
-
-            for (a, b) in Iterators.product(vals_N, vals_M)
-                joined[(Y, a, b)] = linear_index
-                linear_index += 1
-            end
-        end  """
-
         cache[key] = joined
         return joined
     end
@@ -153,59 +142,13 @@ function make_tubes_ij(fusion_rules_M, fusion_rules_N)
     return tubes_ij
 end
 
-# WIP :()
-function make_tubes_ij_(fusion_rules_M, fusion_rules_N)
-    cache = Dict{SVector{4,Int}, Dict{SVector{3,Int},Int}}()
-
-    function tubes_ij(N2::Int, N1::Int, M1::Int, M2::Int)
-        key_outer = @SVector [N2, N1, M1, M2]
-        if haskey(cache, key_outer)
-            return cache[key_outer]
+function dropnearzeros!(A::SparseArray; tol = 1e-12)
+    for (I, v) in collect(A.data)   # collect to avoid mutating during iteration
+        if abs(v) ≤ tol
+            delete!(A.data, I)
         end
-
-        # Call fusion rules only once
-        #println("N2, N1, M1, M2: $((N2, N1, M1, M2))")
-        nonzero_N = fusion_rules_N(N1, N2)
-        if isempty(nonzero_N)
-            return Dict{SVector{3,Int},Int}()  
-        end
-        nonzero_M = fusion_rules_M(M1, M2)
-        if isempty(nonzero_M)
-            return Dict{SVector{3,Int},Int}()  
-        end
-
-        #println("nonzero_N: $((nonzero_N))")
-        #println("nonzero_M: $((nonzero_M))")
-
-        # Fast set intersection
-        common_Y = intersect!(collect(keys(nonzero_N)), keys(nonzero_M))
-        #sort!(common_Y) 
-
-        joined = Dict{SVector{3,Int},Int}()
-        linear_index = 1
-
-        # Avoid repeated sort allocations
-        for Y in common_Y
-            valsN = nonzero_N[Y]
-            valsM = nonzero_M[Y]
-            #sort!(valsN)
-            #sort!(valsM)
-
-            # Iterators.product is fast but we can unroll manually
-            for a in valsN
-                for b in valsM
-                    key = @SVector [Y, a, b]
-                    joined[key] = linear_index
-                    linear_index += 1
-                end
-            end
-        end
-
-        cache[key_outer] = joined
-        return joined
     end
-
-    return tubes_ij
+    return A
 end
 
 # --- Factory for f_ijk_sparse ---
@@ -316,6 +259,7 @@ function make_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{Co
         shape = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
         reindexed_f_symbol = SparseArray{ComplexF64,3}(f_abc_DOK, shape)
 
+        dropnearzeros!(reindexed_f_symbol; tol = 1e-10)
         # Cache and return
         cache[key] = reindexed_f_symbol
         return reindexed_f_symbol
@@ -324,459 +268,14 @@ function make_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{Co
     return f_ijk_sparse
 end
 
-# WIP :()
-function make_f_ijk_sparse__(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{ComplexF64, 10}, 
-                           F_quantum_dims::Vector{Float64}, size_dict::Dict{Symbol, Int}, 
-                           tubes_ij)
-    cache = Dict{Tuple{Int,Int,Int}, SparseArray}()
+""" Tests assocaitivity of algebra given strcuture constants """
+function is_associative(f, tol = 1e-9)
+    @tensor test[i,j,l,m] := f[i,j,k] * f[k,l,m] - f[j,l,k] * f[i,k,m]
 
-    # --- Quantum dimension prefactors ---
-    sqrtd = sqrt.(F_quantum_dims)
-    dY1 = SparseArray(sqrtd)
-    dY2 = SparseArray(sqrtd)
-    dY3 = SparseArray(1.0 ./ sqrtd)
+    max_violation = maximum(abs.(test))
 
-
-    function f_ijk_sparse(i::Int, j::Int, k::Int)
-        key = (i,j,k)
-        println("i,j,k: $((key))")
-        if haskey(cache, key)
-            return cache[key]
-        end
-
-        # --- Decode flattened indices ---
-        M_1, N_1 = index_to_tuple(i, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
-
-        # --- Slice tensors ---
-        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
-        F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
-
-        # --- Get linear indices from tube maps ---
-        idx_a_map = tubes_ij(M_2, M_1, N_1, N_2)
-        idx_b_map = tubes_ij(M_3, M_2, N_2, N_3)
-        idx_c_map = tubes_ij(M_3, M_1, N_1, N_3)
-
-        # --- COllect Nonzero Indices ---
-        keys_N = collect(nonzero_keys(F_N_slice))
-        vals_N = collect(nonzero_values(F_N_slice))
-        keys_M = collect(nonzero_keys(F_M_slice))
-        vals_M = collect(nonzero_values(F_M_slice))
-
-        # Thread-local storage
-        nthreads = Threads.nthreads()
-        thread_DOK = [Dict{CartesianIndex{3}, ComplexF64}() for _ in 1:nthreads]
-
-        # --- Outer loop multithreaded ---
-        @threads for idx_N in eachindex(keys_N)
-            tid = threadid()
-            CI_N = keys_N[idx_N]
-            val_N = vals_N[idx_N]
-
-            #Y1, Y2, Y3, n1, n2, n4, m1, m2, m3 = y,p,x,r,s,n,a,m,b
-
-            Y1, Y2, Y3, n1, l, n2, n4 = Tuple(CI_N)
-
-            @inbounds @simd for idx_M in eachindex(keys_M)
-                CI_M = keys_M[idx_M]
-                val_M = vals_M[idx_M]
-
-                Y1_, Y2_, Y3_, m1, m2, l_, m3 = Tuple(CI_M)
-
-                if Y1_ == Y1 && Y2_ == Y2 && Y3_ == Y3 && l_ == l
-                    factor = dY1[Y1] * dY2[Y2] * dY3[Y3]
-
-                    #key_out = CartesianIndex(Y1, Y2, Y3, n1, n2, n4, m1, m2, m3)
-                    key_out = CartesianIndex(idx_a_map[(Y1, m1, n1)], idx_b_map[(Y2, m2, n2)], idx_c_map[(Y3, m3, n4)])
-                    thread_DOK[tid][key_out] = get(thread_DOK[tid], key_out, 0.0) + val_N * val_M * factor
-                end
-            end
-        end
-
-        # --- Merge thread-local dictionaries ---
-        F_out_DOK = Dict{CartesianIndex{3}, ComplexF64}()
-        for d in thread_DOK
-            for (k,v) in d
-                F_out_DOK[k] = get(F_out_DOK, k, 0.0) + v
-            end
-        end
-
-        shape_out = (length(tubes_ij(M_2,M_1,N_1,N_2)), length(tubes_ij(M_3,M_2,N_2,N_3)), length(tubes_ij(M_3,M_1,N_1,N_3)))
-
-        reindexed_f_symbol = SparseArray{ComplexF64,3}(F_out_DOK, shape_out)
-
-        # Cache and return
-        cache[key] = reindexed_f_symbol
-        return reindexed_f_symbol
-    end
-
-    return f_ijk_sparse
+    return (max_violation <= tol), max_violation
 end
-
-function make_f_ijk_sparse___(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{ComplexF64, 10}, F_quantum_dims::Vector{Float64}, size_dict::Dict{Symbol, Int}, tubes_ij)
-
-    cache = Dict{Tuple{Int,Int,Int}, SparseArray{ComplexF64,3}}()
-
-    # Precompute quantum dimension factors
-    sqrtd = sqrt.(F_quantum_dims)
-    dY1 = SparseArray(sqrtd)
-    dY2 = SparseArray(sqrtd)
-    dY3 = SparseArray(1.0 ./ sqrtd)
-
-    function f_ijk_sparse(i::Int, j::Int, k::Int)
-
-        # --- Caching ---
-        key = (i,j,k)
-        if haskey(cache, key)
-            return cache[key]
-        end
-
-        # --- Decode flattened indices ---
-        M_1, N_1 = index_to_tuple(i, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
-
-        # --- Sparse views ---
-        """
-        F_N_view = view(F_N, :, N_1, :, :, N_2, :, :, N_3, :, :)
-        F_M_view = view(F_M, :, M_1, :, :, M_2, :, :, M_3, :, :)
-        """
-        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
-        F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
-
-        # --- Tube maps ---
-        idx_a_map = tubes_ij(M_2, M_1, N_1, N_2)
-        idx_b_map = tubes_ij(M_3, M_2, N_2, N_3)
-        idx_c_map = tubes_ij(M_3, M_1, N_1, N_3)
-
-        # --- Nonzero keys and values ---
-        keys_N = collect(nonzero_keys(F_N_slice))
-        vals_N = collect(nonzero_values(F_N_slice))
-        keys_M = collect(nonzero_keys(F_M_slice))
-        vals_M = collect(nonzero_values(F_M_slice))
-
-        #YN_array = reduce(hcat, Tuple.(keys_N))
-        #YM_array = reduce(hcat, Tuple.(keys_M))
-
-        nthreads = Threads.nthreads()
-        thread_keys = [Vector{CartesianIndex{3}}() for _ in 1:nthreads]
-        thread_vals = [Vector{ComplexF64}() for _ in 1:nthreads]
-
-        # --- Parallel outer loop ---
-        @threads for idx_N in 1:length(keys_N)
-        #for idx_N in 1:length(keys_N)
-            tid = Threads.threadid()
-            #println(Tuple(keys_N[idx_N]))
-            Y1, Y2, Y3, n1, l, n2, n4 = Tuple(keys_N[idx_N]) #YN_array[:,idx_N] 
-
-            local_keys = thread_keys[tid]
-            local_vals = thread_vals[tid]
-            
-            M_groups = Dict{NTuple{4,Int}, Vector{Int}}()
-            @inbounds for idx_M in 1:length(keys_M)
-                """Y1_, Y2_, Y3_, m1, m2, l_, m3 = Tuple(keys_M[idx_M]) #YM_array[:, idx_M] 
-
-                if Y1_ == Y1 && Y2_ == Y2 && Y3_ == Y3 && l_ == l
-                    factor = dY1[Y1] * dY2[Y2] * dY3[Y3]
-
-                    push!(local_keys, CartesianIndex(
-                        idx_a_map[(Y1, m1, n1)],
-                        idx_b_map[(Y2, m2, n2)],
-                        idx_c_map[(Y3, m3, n4)]
-                    ))
-                    push!(local_vals, vals_N[idx_N] * vals_M[idx_M] * factor)
-                end"""
-
-                
-                Y1_,Y2_,Y3_,m1,m2,l_,m3 = Tuple(keys_M[idx_M])
-                key4 = (Y1_,Y2_,Y3_,l_)
-                push!(get!(M_groups, key4, Int[]), idx_M)
-                
-                for idx_N in 1:length(keys_N)
-                    Y1,Y2,Y3,n1,l,n2,n4 = Tuple(keys_N[idx_N])
-                    key4 = (Y1,Y2,Y3,l)
-
-                    matched_idxs_M = get(M_groups, key4, nothing)
-                    matched_idxs_M === nothing && continue
-
-                    @inbounds for idx_M in matched_idxs_M
-                        Y1_,Y2_,Y3_,m1,m2,l_,m3 = Tuple(keys_M[idx_M])
-
-                        factor = dY1[Y1] * dY2[Y2] * dY3[Y3]
-                        push!(local_keys, CartesianIndex( idx_a_map[(Y1, m1, n1)], idx_b_map[(Y2, m2, n2)], idx_c_map[(Y3, m3, n4)] ))
-                        push!(local_vals, vals_N[idx_N] * vals_M[idx_M] * factor)
-                    end
-                end
-                
-
-            end
-        end
-
-        # --- Merge thread-local results ---
-        keys_out = reduce(vcat, thread_keys)
-        vals_out = reduce(vcat, thread_vals)
-
-        shape_out = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
-        reindexed_f_symbol = SparseArray{ComplexF64,3}(Dict(zip(keys_out, vals_out)), shape_out)
-
-        cache[key] = reindexed_f_symbol
-        return reindexed_f_symbol
-    end
-
-    return f_ijk_sparse
-end
-
-"""function make_f_ijk_sparse( F_N::SparseArray{ComplexF64, 10},
-                            F_M::SparseArray{ComplexF64, 10},
-                            F_quantum_dims::Vector{Float64},
-                            size_dict::Dict{Symbol, Int},
-                            tubes_ij)
-
-    cache = Dict{Tuple{Int,Int,Int}, SparseArray{ComplexF64,3}}()
-
-    # Precompute quantum dimension factors (plain vectors for fast indexing)
-    sqrtd = sqrt.(F_quantum_dims)
-    dY1 = sqrtd
-    dY2 = sqrtd
-    dY3 = 1.0 ./ sqrtd
-
-    function f_ijk_sparse(i::Int, j::Int, k::Int)
-        key = (i,j,k)
-        if haskey(cache, key)
-            return cache[key]
-        end
-
-        # decode flattened indices
-        M_1, N_1 = index_to_tuple(i, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
-
-        # preslice (use your slice function / view)
-        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
-        F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
-
-        # tube maps (dicts mapping (Y,m,n) -> linear index)
-        idx_a_map = tubes_ij(M_2, M_1, N_1, N_2)
-        idx_b_map = tubes_ij(M_3, M_2, N_2, N_3)
-        idx_c_map = tubes_ij(M_3, M_1, N_1, N_3)
-
-        # collect nonzero keys/values (materialize once)
-        keys_N = collect(nonzero_keys(F_N_slice))   # Vector{CartesianIndex{7}} or similar
-        println(size(keys_N))
-        vals_N = collect(nonzero_values(F_N_slice))
-        keys_M = collect(nonzero_keys(F_M_slice))
-        vals_M = collect(nonzero_values(F_M_slice))
-
-        # fast return if empty
-        if isempty(keys_N) || isempty(keys_M)
-            shape_out = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
-            reindexed_f_symbol = SparseArray{ComplexF64,3}(Dict{CartesianIndex{3},ComplexF64}(), shape_out)
-            cache[key] = reindexed_f_symbol
-            return reindexed_f_symbol
-        end
-
-        # Convert keys to tuple form and pre-extract components to arrays for O(1) indexing
-        keysN_tuples = Tuple.(keys_N)  # Vector{NTuple{7,Int}}
-        keysM_tuples = Tuple.(keys_M)
-
-        # components arrays for M set (so inner loop avoids Tuple allocation)
-        Y1m = [t[1] for t in keysM_tuples]
-        Y2m = [t[2] for t in keysM_tuples]
-        Y3m = [t[3] for t in keysM_tuples]
-        m1_arr = [t[4] for t in keysM_tuples]
-        m2_arr = [t[5] for t in keysM_tuples]
-        lm_arr = [t[6] for t in keysM_tuples]
-        m3_arr = [t[7] for t in keysM_tuples]
-
-        # Build buckets: map (Y1,Y2,Y3,l) -> Vector{Int} of indices into keys_M
-        M_groups = Dict{NTuple{4,Int}, Vector{Int}}()
-        for idxM in 1:length(keysM_tuples)
-            k4 = (Y1m[idxM], Y2m[idxM], Y3m[idxM], lm_arr[idxM])
-            push!(get!(M_groups, k4, Int[]), idxM)
-        end
-
-        # Prepare thread-local result buffers
-        nthreads = Threads.nthreads()
-        thread_keys = [Vector{CartesianIndex{3}}() for _ in 1:nthreads]
-        thread_vals = [Vector{ComplexF64}() for _ in 1:nthreads]
-
-        # Parallel outer loop (each N-key handled independently)
-        @threads for iN in 1:length(keysN_tuples)
-            tid = threadid()
-            local_keys = thread_keys[tid]
-            local_vals = thread_vals[tid]
-
-            tN = keysN_tuples[iN]
-            # unpack N-tuple: adjust according to your actual tuple layout (here assumed 7)
-            Y1, Y2, Y3, n1, l, n2, n4 = tN
-            valN = vals_N[iN]
-            # precompute factor and the map-get key
-            factor = @inbounds dY1[Y1] * dY2[Y2] * dY3[Y3]
-            key4 = (Y1, Y2, Y3, l)
-
-            # retrieve matching M indices (fast) — skip if none
-            matched = get(M_groups, key4, nothing)
-            matched === nothing && continue
-
-            # iterate only matching M entries
-            @inbounds for idxM in matched
-                # get components and value quickly
-                m1 = m1_arr[idxM]
-                m2 = m2_arr[idxM]
-                m3 = m3_arr[idxM]
-                valM = vals_M[idxM]
-                
-                # map to linear indices using tube maps
-                idx_a = idx_a_map[@SVector [Y1, m1, n1]]
-                idx_b = idx_b_map[@SVector [Y2, m2, n2]]
-                idx_c = idx_c_map[@SVector [Y3, m3, n4]]
-
-                push!(local_keys, CartesianIndex(idx_a, idx_b, idx_c))
-                push!(local_vals, valN * valM * factor)
-            end
-        end
-
-        # Merge thread-local buffers into single arrays
-        keys_out = reduce(vcat, thread_keys)
-        vals_out = reduce(vcat, thread_vals)
-
-        # Aggregate duplicates by summing values for same CartesianIndex
-        F_out_DOK = Dict{CartesianIndex{3}, ComplexF64}()
-        @inbounds for t in 1:length(keys_out)
-            k_out = keys_out[t]
-            F_out_DOK[k_out] = get(F_out_DOK, k_out, 0.0 + 0im) + vals_out[t]
-        end
-
-        shape_out = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
-        reindexed_f_symbol = SparseArray{ComplexF64,3}(F_out_DOK, shape_out)
-
-        # cache + return
-        cache[key] = reindexed_f_symbol
-        return reindexed_f_symbol
-    end
-
-    return f_ijk_sparse
-end
-"""
-
-function make_f_ijk_sparse____(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{ComplexF64, 10},F_quantum_dims::Vector{Float64},size_dict::Dict{Symbol, Int},tubes_ij)
-
-    cache = Dict{Tuple{Int,Int,Int}, SparseArray{ComplexF64,3}}()
-
-    # Precompute quantum dimension factors
-    sqrtd = sqrt.(F_quantum_dims)
-    dY1 = sqrtd
-    dY2 = sqrtd
-    dY3 = 1.0 ./ sqrtd
-
-    function f_ijk_sparse(i::Int, j::Int, k::Int)
-        key = (i,j,k)
-        if haskey(cache, key)
-            return cache[key]
-        end
-
-        # decode flattened indices
-        M_1, N_1 = index_to_tuple(i, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
-        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
-
-        # preslice
-        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
-        F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
-
-        # tube maps
-        idx_a_map = tubes_ij(M_2, M_1, N_1, N_2)
-        idx_b_map = tubes_ij(M_3, M_2, N_2, N_3)
-        idx_c_map = tubes_ij(M_3, M_1, N_1, N_3)
-
-        # collect nonzero keys/values
-        keys_N = collect(nonzero_keys(F_N_slice))
-        vals_N = collect(nonzero_values(F_N_slice))
-        keys_M = collect(nonzero_keys(F_M_slice))
-        vals_M = collect(nonzero_values(F_M_slice))
-
-        if isempty(keys_N) || isempty(keys_M)
-            shape_out = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
-            reindexed_f_symbol = SparseArray{ComplexF64,3}(Dict{CartesianIndex{3},ComplexF64}(), shape_out)
-            cache[key] = reindexed_f_symbol
-            return reindexed_f_symbol
-        end
-
-        # Pre-extract components as arrays to avoid tuple allocations
-        Y1M = Int[]
-        Y2M = Int[]
-        Y3M = Int[]
-        m1_arr = Int[]
-        m2_arr = Int[]
-        lM_arr = Int[]
-        m3_arr = Int[]
-
-        for kM in keys_M
-            push!(Y1M, kM[1])
-            push!(Y2M, kM[2])
-            push!(Y3M, kM[3])
-            push!(m1_arr, kM[4])
-            push!(m2_arr, kM[5])
-            push!(lM_arr, kM[6])
-            push!(m3_arr, kM[7])
-        end
-
-        # Bucket M indices by (Y1,Y2,Y3,l)
-        M_groups = Dict{NTuple{4,Int}, Vector{Int}}()
-        for idxM in 1:length(keys_M)
-            key4 = (Y1M[idxM], Y2M[idxM], Y3M[idxM], lM_arr[idxM])
-            push!(get!(M_groups, key4, Int[]), idxM)
-        end
-
-        # Result arrays
-        keys_out = Vector{CartesianIndex{3}}()
-        vals_out = Vector{ComplexF64}()
-
-        # Sequential loop over N
-        for iN in 1:length(keys_N)
-            kN = keys_N[iN]
-            Y1, Y2, Y3 = kN[1], kN[2], kN[3]
-            n1, l, n2, n4 = kN[4], kN[6], kN[5], kN[7] # adjust order if needed
-            valN = vals_N[iN]
-
-            factor = dY1[Y1] * dY2[Y2] * dY3[Y3]
-            key4 = (Y1, Y2, Y3, l)
-
-            matched = get(M_groups, key4, nothing)
-            matched === nothing && continue
-
-            for idxM in matched
-                m1, m2, m3 = m1_arr[idxM], m2_arr[idxM], m3_arr[idxM]
-                valM = vals_M[idxM]
-
-                # map to linear indices
-                idx_a = idx_a_map[@SVector [Y1, m1, n1]]
-                idx_b = idx_b_map[@SVector [Y2, m2, n2]]
-                idx_c = idx_c_map[@SVector [Y3, m3, n4]]
-
-                push!(keys_out, CartesianIndex(idx_a, idx_b, idx_c))
-                push!(vals_out, valN * valM * factor)
-            end
-        end
-
-        # Aggregate duplicates
-        F_out_DOK = Dict{CartesianIndex{3}, ComplexF64}()
-        @inbounds for t in 1:length(keys_out)
-            k_out = keys_out[t]
-            F_out_DOK[k_out] = get(F_out_DOK, k_out, 0.0 + 0im) + vals_out[t]
-        end
-
-        shape_out = (length(idx_a_map), length(idx_b_map), length(idx_c_map))
-        reindexed_f_symbol = SparseArray{ComplexF64,3}(F_out_DOK, shape_out)
-
-        cache[key] = reindexed_f_symbol
-        return reindexed_f_symbol
-    end
-
-    return f_ijk_sparse
-end
-
 
 # --- Function that computes dimension of subalgebra ijk
 function make_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij)

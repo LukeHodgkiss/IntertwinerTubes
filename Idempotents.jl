@@ -59,7 +59,10 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
     Q_old = Matrix(qr_decomp.Q)
     R = qr_decomp.R
     rank_old = count(abs.(diag(R)) .> tol_rank)
-
+    #println("rank_old: $((rank_old))")
+    if sum(abs.(diag(R))) < tol_rank
+        return zeros(0, 0), d_irrep
+    end
     while true
         L = L_X(algebra, j, v.subalgebra[1], v.subalgebra[2]; rng=rng)
         new_v = (L * v).vector
@@ -75,10 +78,11 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
             rank_old = rank_new
             d_irrep_new = d_irrep + size(Q_old)[1]^2
 
+            #=
             if d_irrep_new>=d_subalgebra_iii
                 break
             end
-
+            =#
         else
             break
         end
@@ -94,7 +98,7 @@ remove_overlapping_evec(algebra::TubeAlgebra, ED_ii::Vector{EigVec}, ED::Vector{
 Return ED_ii with eigenvectors removed that have overlap > tol_overlap with any vector in ED.
 """
 function remove_overlapping_evec(algebra::TubeAlgebra, random_left_linear_combination_ijk::Function, random_right_linear_combination_ijk::Function, ED_ii::Vector{EigVec}, ED::Vector{EigVec}; 
-    tol_overlap::Float64 = 1e-10)
+    tol_overlap::Float64 = 1e-11)
     trimmed = Vector{EigVec}()
     for evec in ED_ii
         overlaps = 0.0 + 0im
@@ -105,19 +109,7 @@ function remove_overlapping_evec(algebra::TubeAlgebra, random_left_linear_combin
             #if haskey(algebra.dimension_dict, (j, t, s)) && haskey(algebra.dimension_dict, (s, i, j))
                 LX_sij = random_left_linear_combination_ijk(algebra, s, i, j)
                 RX_jts = random_right_linear_combination_ijk(algebra, j, t, s)
-                
-                vl = RX_jts * evec
-                vr = LX_sij * old_evec
-                """
-                print("Problem Here")
-                @show j, t, s, s, i, j
-                @show algebra.dimension_dict[(j, t, s)], algebra.dimension_dict[(s, i, j)]
-                @show size(RX_jts.LX), size(evec.vector), size(vl.vector)
-                @show RX_jts.subalgebra, evec.subalgebra, vl.subalgebra
-                @show size(LX_sij.LX), size(old_evec.vector), size(vr.vector)
-                @show LX_sij.subalgebra, old_evec.subalgebra, vr.subalgebra
-                """
-                overlaps = abs(inner_product(vl, vr))
+                overlaps = abs(inner_product(RX_jts * evec, LX_sij * old_evec))
                 #println(overlaps)
             else
                 overlaps = 0.0
@@ -145,8 +137,17 @@ function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii;
     tol_overlap::Float64 = 1e-10)
     kept = Vector{EigVec}()
     for e1 in ED_ii
-        ok = all(abs(inner_product(RX_iii * e1, LX_iii * e2)) < tol_overlap for e2 in kept)
-        if ok
+        overlaps = 0
+        #println("test new candiatate seed vec")
+        for e2 in kept
+            #@show abs(inner_product(RX_iii * e1, LX_iii * e2))
+            overlaps += abs(inner_product(RX_iii * e1, LX_iii * e2))
+            if overlaps>tol_overlap
+                break
+            end
+        end
+
+        if overlaps < tol_overlap 
             push!(kept, e1)
         end
     end
@@ -164,7 +165,8 @@ function build_out_irrep(v::EigVec, i::Int, algebra::TubeAlgebra, random_left_li
     irrep_blocks = Dict{Tuple{Int,Int}, Matrix{ComplexF64}}()
     d_subalgebra_iii = algebra.dim_ijk(i,i,i)[1]^2
     d_irrep = 0
-    
+
+    #for j in 1:algebra.N_diag_blocks
     for j in i:algebra.N_diag_blocks
         if algebra.dim_ijk(j, v.subalgebra[1], v.subalgebra[2]) !== nothing
             #println("alg: $((j, v.subalgebra[1], v.subalgebra[2])))")
@@ -203,35 +205,40 @@ function find_idempotents(algebra::TubeAlgebra)
     for ii in 1:algebra.N_diag_blocks
 
         # diagonalize block (ii,ii)
-        #@show ii, algebra.N_diag_blocks
-        println("Considering block ED: $(ii)")
+        #println("Considering block ED: $(ii)")
         ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
 
         # remove overlapping vectors between the blocks
-        #println("remove overlaps with global ED")
         ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii, ED_global)
 
         # remove overlapping vectors within the block
-        #println("remove overlaps within the block")
-        RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; rng=rng)
-        LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; rng=rng)
+        #RX_iii = conj!(random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng))
+        RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
+        #RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=true, rng=rng)
+
+        LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
+        #LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=true, rng=rng)
+
         ED_ii_trimmed = remove_evec_in_same_block_ii(ED_ii_ortho, RX_iii, LX_iii)
 
         append!(ED_global, ED_ii_trimmed)
 
         # build irreps from each unique eigenvector
         for vec in ED_ii_trimmed
-            println("build irreps from each unique eigenvector")
+            #println("build irreps from each unique eigenvector")
+            #@show vec
             irrep, d_irrep = build_out_irrep(vec, ii, algebra, random_left_linear_combination_ijk, rng)
             d_irrep = sum(size(Q)[1]^2 for Q in values(irrep))
-            println("d_irrep $d_irrep")
+            #println("d_irrep $d_irrep")
             #d_irrep = length(values(irrep))
             push!(irrep_projectors, irrep)
             push!(d_irrep_list, d_irrep)   
+            #=
             if d_sum(d_irrep_list) >= d_algebra_squared
                 print("We saved time? :)")
                 return irrep_projectors
             end
+            =#
         end
     end
 
@@ -247,8 +254,3 @@ if d_sum(d_irrep_list) >= d_algebra_squared
             end
 =#
 
-#=
-
-
-
-=#
