@@ -13,8 +13,6 @@ using StaticArrays: SVector, @SVector
 include("F_symbolTools.jl")
 using .FSymbolTools    
  
-
-
 # --- Tuple <-> Index ---
 tuple_to_index(tup::NTuple, shape::NTuple) = LinearIndices(shape)[tup...]
 index_to_tuple(idx::Int, shape::NTuple) = Tuple(CartesianIndices(shape)[idx])
@@ -61,50 +59,6 @@ function make_fusion_rules(F::SparseArray, size_dict::Dict)
     return fusion_rules
 end
 
-function make_fusion_rules_(F::SparseArray, size_dict::Dict)
-    N_fusion_elements = size_dict[:fusion_label]
-
-    #cache = Dict{Tuple{Int,Int}, Dict{Int,Vector{Int}}}()
-    cache = Dict{SVector{Int,2}, Dict{Int,Int}}()
-
-
-    function fusion_rules(M2::Int, M1::Int; tol = 1e-10)
-        #key = (M2, M1)
-        key = @SVector[M2, M1]
-
-        if haskey(cache, key)
-            return cache[key]
-        end
-
-        # Preallocate result container
-        #nonzero_M2M1 = Dict{Int,Vector{Int}}()
-        #nonzero_M2M1 = Dict{Int,Vector{Int}}()
-
-        nonzero_M2M1 = Dict{Int,Int}()
-        nonzero_M2M1 = Dict{Int,Int}()
-
-        for Y in 1:N_fusion_elements
-            #hom_space_view = @view F[M2, 1,Y, M1, M2, Y, 1,:,1,:]
-            hom_space_view = SparseSliceView(F, Dict(1=>M2, 2=>1, 3=>Y, 4=>M1, 5=>M2, 6=>Y, 7=>1, 9=>1))
-            
-            for k in keys(hom_space_view)             
-                #kt = Tuple(k)   
-                #println(k)         
-                val = hom_space_view[Tuple(k)...]  
-
-                if abs(val) > tol
-                    alpha = k[1]
-                    push!(get!(nonzero_M2M1, Y, Int[]), alpha)
-                end
-            end
-        end
-
-        cache[key] = nonzero_M2M1
-        return nonzero_M2M1
-    end
-
-    return fusion_rules
-end
 
 # --- Tubes Factory ---
 function make_tubes_ij(fusion_rules_M, fusion_rules_N)
