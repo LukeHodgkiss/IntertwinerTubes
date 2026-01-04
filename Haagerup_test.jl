@@ -24,8 +24,6 @@ include("Saving_Stuff.jl")
 using .Saving_Stuff
 
 # Read in F-symbol
-
-global dim_alg_glob = 0
 println("Reading in F symbol data")
 
 #=
@@ -75,9 +73,8 @@ size_dict = Dict(:module_label => size(F, 1),
                  :fusion_label => size(F, 2),
                  :multiplicity_label => size(F)[end])
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+
 =#
-
-
 # Haagerup example
 index_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_ind.csv"
 value_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_var.csv"
@@ -113,7 +110,8 @@ quantum_dims = vec(Haagerup_dim_mat_file["dimD"])
 #quantum_dims = Haagerup_dim_mat_file["dimM"]
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
-
+#=
+=#
 
 println("Finished reading in F symbol data")
 
@@ -131,6 +129,7 @@ M_abc = reindexdims(F[:,:,:,:,:,1,:,:,:,:], (2,4,5,7))# Y, N1, N2, ν
 
 tubes_ij = make_tubes_ij(fusion_rules_M, fusion_rules_N)
 f_ijk_sparse = make_f_ijk_sparse(F, conj!(F), quantum_dims, size_dict, tubes_ij)
+@show length(f_ijk_sparse(12,12,1))
 
 #dimension_dict = compute_dim_dict(size_dict, tubes_ij)
 dimension_dict = make_dim_dict(size_dict, tubes_ij)
@@ -146,13 +145,12 @@ N_diag_blocks = size_dict[:module_label_N]*size_dict[:module_label_M]
 #d_algebra_squared = 27863#N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
 d_algebra = 27863  #N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
+#@show f_ijk_sparse(12,12,12)
 
-#@show f_ijk_sparse(4,1,1)
+#@show f_ijk_sparse(1,1,1)
 
 # Calculate idempotents
-
-
-
+#=
 Profile.clear()
 #Profile.init(n = 10^7, delay = 0.001)
 #@profile find_idempotents(tubealgebra)
@@ -160,19 +158,130 @@ Profile.clear()
 Profile.print(format = :flat, sortedby = :count)
 ProfileView.view()
 
-#idempotents_dict = find_idempotents(tubealgebra)
-#=
-for irrep in idempotents_dict
-    println("Irrep has size: $(length(irrep))")
-    
-    for (ij, proj) in irrep
-        println("Projector $(ij) has shape $(size(proj)) ")
-        dim_alg_glob=dim_alg_glob+(size(proj)[2]^2)
+idempotents_dict = find_idempotents(tubealgebra)
+=#
+
+function dim_calc(idempotents_dict)
+    dim_alg_glob = 0
+    for irrep in idempotents_dict
+        println("Irrep has size: $(length(irrep))")
+        
+        for (ij, proj) in irrep
+            println("Projector $(ij) has shape $(size(proj)) ")
+            dim_alg_glob=dim_alg_glob+((size(proj)[2])^2)
+        end 
+    end
+    #@show dim_alg_glob
+end
+#dim_calc(idempotents_dict)
+
+function create_fusion_rules(F)
+    #F[M2, Y1, Y, M1, M2, Y, 1, :, 1, :]
+    #F = reindexdims(F, (1,5,3,8))
+    #F = reindexdims(F, (4,5,3,10))
+
+    hom_space = slice_sparse_tensor(F, Dict(2=>1, 7=>1, 9=>1)) #F[M2, Y1, Y, M1, M2, Y, 1, :, 1, :]
+    # 1=>M2, 3=>Y, 4=>M1, 5=>M2, 6=>Y, 
+    F = reindexdims(hom_space, (3,1,2,6)) #M1, M2, Y: k
+
+
+    N_M1 = Dict{CartesianIndex{3}, Int}()
+
+    for indx in nonzero_keys(F)
+        @inbounds begin
+            key = CartesianIndex(indx[1], indx[2], indx[3])
+            N_M1[key] = get(N_M1, key, 0) + 1
+        end
     end
     
+    return N_M1
+end 
+@time N_M = create_fusion_rules(F)
+
+
+function create_tube_map(N_M, N_N, size_dict)
+    tube_map = Dict{NTuple{7,Int}, Int}()
+    tube_map_shape = Dict{NTuple{4,Int}, Int}() # Add expected shape as #N**2 * #M**2 and set initial value to 0 
+    sizehint!(tube_map_shape, size_dict[:module_label_M]^2 * size_dict[:module_label_N]^2 )
+
+    # M1, M2, N1, N2, Y, m, n, 
+    #function tubes_ij(N2::Int, N1::Int, M1::Int, M2::Int)
+
+    for (indx_M, val_M) in N_M
+        M1, M2, Y = indx_M.I  
+        #println(indx_M)
+
+        for (indx_N, val_N) in N_N
+            N1, N2, YN = indx_N.I
+            #println(indx_N)
+
+            linear_index = 1 # need to check if for this given Y, YN pair is the M1, M2, N1, N2 seen before
+            # Can we just do:
+            #common_Y = sort(collect(intersect(keys(N_N), keys(N_M))))
+            
+            if Y == YN
+                #@show val_M, val_N
+
+                @inbounds for m in 1:val_M
+                    @inbounds for n in 1:val_N
+                        #key = (M1, M2, N1, N2, Y, m, n)
+                        #println(m, n)
+                        #key = (N2, N1, M1, M2, Y, m, n)
+                        #key = (M2, M1, N1, N2, Y, m, n)
+
+                        #tube_map_shape[(M2, M1, N1, N2)] = get(tube_map_shape, (M2, M1, N1, N2), 0) + 1 # linear_index
+                        #tube_map[key] = tube_map_shape[(M2, M1, N1, N2)] 
+
+                        key = (M1, M2, N2, N1, Y, m, n)
+
+                        tube_map_shape[(M1, M2, N2, N1)] = get(tube_map_shape, (M1, M2, N2, N1), 0) + 1 # linear_index
+                        tube_map[key] = tube_map_shape[(M1, M2, N2, N1)] 
+                        
+                    end
+                end
+
+                #tube_map_shape[(M1, M2, N1, N2)] = val_M*val_N
+            end
+        end
+    end
+    
+    return tube_map, tube_map_shape
 end
+
+@time tubes_ij, tube_map_shape = create_tube_map(N_M, N_M, size_dict)
+@show get(N_M, (1,2,3), 0)
+@show get(N_M, (2,1,3), 0)
+
+#@show tubes_ij[(2, 1, 1, 2, 3, 1, 1)]
+#@show tubes_ij[(1, 2, 2, 1, 3, 1, 1)]
+
+
+f_ijk_sparse = create_f_ijk_sparse(F, conj!(F), quantum_dims, size_dict, tubes_ij, tube_map_shape, N_M, N_M)
+dimension_dict = create_dim_dict(size_dict, tubes_ij, tube_map_shape, N_M, N_M)
+tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
+
+@time f = f_ijk_sparse(12,12,1)
+@show length(f)
+@time idempotents_dict = find_idempotents(tubealgebra)
+#@show idempotents_dict = find_idempotents(tubealgebra)
+dim_calc(idempotents_dict)
+
+#=
+N_M1 = reindexdims(F, (1,5,3,10))
+@show length(nonzero_pairs(N_M1) )
+
+N_M1.= 1
+@show length(nonzero_pairs(N_M1) )
+temp_vec = SparseArray(ones(size(N_M1)[4]))
+print(size(N_M1))
+#N_M1 = dropdims(N_M1, dims=4)
+@tensor N_M[M1,M2,Y] := N_M1[M1,M2,Y,k]*temp_vec[k]
+#@show N_M1
+#@tensor N_M1[M1,M2,Y] := N_M1[M1,M2,Y, k]
 =#
-@show dim_alg_glob
+
+
+#==#
 #@show idempotents_dict[2]
 #println(size(irrep) for irrep in idempotents_dict)
 
@@ -181,8 +290,8 @@ end
 
 #U = sparse_clebsch_gordon_coefficients(ω, quantum_dims)
 #save_ω(U)
-#=
 
+#=
 full_dimension_dict = compute_dim_dict(size_dict, tubes_ij)
 println(full_dimension_dict)
 

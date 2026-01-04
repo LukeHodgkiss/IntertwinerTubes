@@ -1,6 +1,6 @@
 module IntertwinerTools
 
-export make_fusion_rules, make_tubes_ij, make_f_ijk_sparse, compute_dim_dict, is_associative, make_dim_dict, sparse_clebsch_gordon_coefficients #, construct_irreps
+export make_fusion_rules, make_tubes_ij, make_f_ijk_sparse, compute_dim_dict, is_associative, make_dim_dict, sparse_clebsch_gordon_coefficients, create_f_ijk_sparse, create_dim_dict #, construct_irreps
 
 using Base.Threads
 using SparseArrayKit
@@ -58,6 +58,7 @@ function make_fusion_rules(F::SparseArray, size_dict::Dict)
     end
     return fusion_rules
 end
+
 
 
 # --- Tubes Factory ---
@@ -170,6 +171,7 @@ function make_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{Co
         for (col, CI) in enumerate(keys_array)
             @inbounds coords_matrix[:, col] .= Tuple(CI)
         end
+        
         Y1, Y2, Y3, n1, n2, n4, m1, m2, m3  = ntuple(d -> coords_matrix[d, :], N_axes)
         #Y1, Y2, Y3, n1, m3, n4, m1, m2, n2  = ntuple(d -> coords_matrix[d, :], N_axes)
         #Y1, Y2, Y3, m1, m2, m3, n1, n2, n4  = ntuple(d -> coords_matrix[d, :], N_axes)
@@ -222,6 +224,100 @@ function make_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{Co
     return f_ijk_sparse
 end
 
+function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{ComplexF64, 10}, 
+                           F_quantum_dims::Vector{Float64}, size_dict::Dict{Symbol, Int}, 
+                           tubes_ij, tube_map_shape, N_M, N_N)
+    cache = Dict{Tuple{Int,Int,Int}, SparseArray}()
+
+    function f_ijk_sparse(i::Int, j::Int, k::Int)
+        key = (i,j,k)
+        #println("i,j,k: $((key))")
+        if haskey(cache, key)
+            return cache[key]
+        end
+
+        # --- Decode flattened indices ---
+        M_1, N_1 = index_to_tuple(i, (size_dict[:module_label_N], size_dict[:module_label_M]))
+        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
+        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
+        #println("M_1, N_1 = $M_1, $N_1")
+        #println("M_2, N_2 = $M_2, $N_2")
+        #println("M_3, N_3 = $M_3, $N_3")
+
+        # --- Slice tensors ---
+        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
+        F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
+
+        # --- Quantum dimension prefactors ---
+        sqrtd = sqrt.(F_quantum_dims)
+        dY1 = SparseArray(sqrtd)
+        dY2 = SparseArray(sqrtd)
+        dY3 = SparseArray(1.0 ./ sqrtd)
+
+        # --- Contractions ---
+        F_N_sliced_doubled = reindexdims(F_N_slice, (1,1,2,2,3,3,4,5,6,7))
+        F_M_sliced_doubled = conj!(reindexdims(F_M_slice, (1,1,2,2,3,3,4,5,6,7)))
+
+        """
+        println("F_quantum_dims:  $(F_quantum_dims)")
+
+        println("F_N $( (size(F_N)) )")
+        println("F_N_sliced $( (size(F_N_slice)) )")
+        println("F_N_sliced_doubled $( (size(F_N_sliced_doubled)) )")
+
+
+        println("F_M $( (size(F_M)) )")
+        println("F_M_sliced $( (size(F_M_slice)) )")
+        println("F_M_sliced_doubled $( (size(F_M_sliced_doubled)) )")
+        """
+        #@tensor F_N_sliced_doubled_scaled[y_, p_, x_,r,s,l,n ] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * dY1[y__] * dY2[p__] * dY3[x__]
+        #@tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled_scaled[y_, p_, x_, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,b,l ]
+        @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ] * dY1[y__] * dY2[p__] * dY3[x__]
+        dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
+
+        # --- Remove small values ---
+        #dxdxpdy_F_M_dot_F_N = remove_zeros!(dxdxpdy_F_M_dot_F_N)
+        #println("dxdxpdy_F_M_dot_F_N has hsape: $(size(dxdxpdy_F_M_dot_F_N))")
+        # Convert linear indices to Cartesian indices
+        keys_array = collect(nonzero_keys(dxdxpdy_F_M_dot_F_N))                     
+        nnz = length(keys_array)
+        N_axes = ndims(dxdxpdy_F_M_dot_F_N)
+        
+        coords_matrix = Array{Int,2}(undef, N_axes, nnz)
+        for (col, CI) in enumerate(keys_array)
+            @inbounds coords_matrix[:, col] .= Tuple(CI)
+        end
+        Y1, Y2, Y3, n1, n2, n4, m1, m2, m3  = ntuple(d -> coords_matrix[d, :], N_axes)
+
+        vals = collect(nonzero_values(dxdxpdy_F_M_dot_F_N))
+
+        index_a = [tubes_ij[(M_2, M_1, N_1, N_2, Y1_, m1_, n1_)] for (Y1_, m1_, n1_) in zip(Y1, m1, n1)]
+        index_b = [tubes_ij[(M_3, M_2, N_2, N_3, Y2_, m2_, n2_)] for (Y2_, m2_, n2_) in zip(Y2, m2, n2)]
+        index_c = [tubes_ij[(M_3, M_1, N_1, N_3, Y3_, m3_, n4_)] for (Y3_, m3_, n4_) in zip(Y3, m3, n4)]
+
+        #=
+        @show index_a
+        @show index_b
+        @show index_c
+        =#
+
+        f_abc_DOK = Dict{CartesianIndex{3}, ComplexF64}()
+        for idx in 1:nnz
+            f_abc_DOK[CartesianIndex(index_a[idx], index_b[idx], index_c[idx])] = vals[idx]
+        end
+        
+        shape = (tube_map_shape[(M_2, M_1, N_1, N_2)], tube_map_shape[(M_3, M_2, N_2, N_3)], tube_map_shape[(M_3, M_1, N_1, N_3)])
+        reindexed_f_symbol = SparseArray{ComplexF64,3}(f_abc_DOK, shape)
+
+        dropnearzeros!(reindexed_f_symbol; tol = 1e-10)
+        # Cache and return
+        cache[key] = reindexed_f_symbol
+        return reindexed_f_symbol
+    end
+
+    return f_ijk_sparse
+end
+
 """ Tests assocaitivity of algebra given strcuture constants """
 function is_associative(f, tol = 1e-9)
     @tensor test[i,j,l,m] := f[i,j,k] * f[k,l,m] - f[j,l,k] * f[i,k,m]
@@ -262,11 +358,45 @@ function make_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij)
         if size_c == 0
             return
         end
+
+        cache[key] = (size_a, size_b, size_c)
+        return (size_a, size_b, size_c)
+    end
+end
+
+function create_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij, tube_map_shape, N_M, N_N)
+    cache = Dict{Tuple{Int,Int,Int}, Tuple{Int,Int,Int}}()
+
+    function dim_ijk(i,j,k)
+        key = (i,j,k)
+        if haskey(cache, key)
+            return cache[key]
+        end
+
+        N_Mcat = size_dict[:module_label_N]
+        N_Ncat = size_dict[:module_label_M]
+        M_1, N_1 = index_to_tuple(i, (N_Mcat, N_Ncat))
+        M_2, N_2 = index_to_tuple(j, (size_dict[:module_label_N], size_dict[:module_label_M]))
+        
+        size_a = get(tube_map_shape, (M_2, M_1, N_1, N_2), 0)
+        if size_a == 0
+            return 
+        end
+        M_3, N_3 = index_to_tuple(k, (size_dict[:module_label_N], size_dict[:module_label_M]))
+        size_b = get(tube_map_shape, (M_3, M_2, N_2, N_3), 0)
+        if size_b == 0
+            return
+        end
+        size_c = get(tube_map_shape, (M_3, M_1, N_1, N_3), 0)
+        if size_c == 0
+            return
+        end
         
         cache[key] = (size_a, size_b, size_c)
         return (size_a, size_b, size_c)
     end
 end
+
 
 # --- Construct Dictionary Of Nonzero Blocks ---
 function compute_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij)
