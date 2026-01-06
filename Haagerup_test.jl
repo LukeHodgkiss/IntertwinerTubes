@@ -25,7 +25,6 @@ using .Saving_Stuff
 
 # Read in F-symbol
 println("Reading in F symbol data")
-
 #=
 # F Symbol Fibonnacci
 index_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_ind.csv"
@@ -75,6 +74,7 @@ size_dict = Dict(:module_label => size(F, 1),
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
 =#
+
 # Haagerup example
 index_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_ind.csv"
 value_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_var.csv"
@@ -129,8 +129,7 @@ M_abc = reindexdims(F[:,:,:,:,:,1,:,:,:,:], (2,4,5,7))# Y, N1, N2, ν
 
 tubes_ij = make_tubes_ij(fusion_rules_M, fusion_rules_N)
 f_ijk_sparse = make_f_ijk_sparse(F, conj!(F), quantum_dims, size_dict, tubes_ij)
-@show length(f_ijk_sparse(12,12,1))
-
+#@show length(f_ijk_sparse(12,12,1))
 #dimension_dict = compute_dim_dict(size_dict, tubes_ij)
 dimension_dict = make_dim_dict(size_dict, tubes_ij)
 
@@ -145,6 +144,9 @@ N_diag_blocks = size_dict[:module_label_N]*size_dict[:module_label_M]
 #d_algebra_squared = 27863#N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
 d_algebra = 27863  #N_diag_blocks*N_diag_blocks # calculate by contracting fusion tensor then summing up all the entries
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
+println("Old way")
+#@time idempotents_dict = find_idempotents(tubealgebra)
+
 #@show f_ijk_sparse(12,12,12)
 
 #@show f_ijk_sparse(1,1,1)
@@ -247,24 +249,16 @@ function create_tube_map(N_M, N_N, size_dict)
     
     return tube_map, tube_map_shape
 end
-
-@time tubes_ij, tube_map_shape = create_tube_map(N_M, N_M, size_dict)
-@show get(N_M, (1,2,3), 0)
-@show get(N_M, (2,1,3), 0)
-
-#@show tubes_ij[(2, 1, 1, 2, 3, 1, 1)]
-#@show tubes_ij[(1, 2, 2, 1, 3, 1, 1)]
-
+tubes_ij, tube_map_shape = create_tube_map(N_M, N_M, size_dict)
 
 f_ijk_sparse = create_f_ijk_sparse(F, conj!(F), quantum_dims, size_dict, tubes_ij, tube_map_shape, N_M, N_M)
-dimension_dict = create_dim_dict(size_dict, tubes_ij, tube_map_shape, N_M, N_M)
+@time dimension_dict = create_dim_dict(size_dict, tubes_ij, tube_map_shape, N_M, N_M)
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
 
-@time f = f_ijk_sparse(12,12,1)
-@show length(f)
+println("New way")
 @time idempotents_dict = find_idempotents(tubealgebra)
 #@show idempotents_dict = find_idempotents(tubealgebra)
-dim_calc(idempotents_dict)
+#dim_calc(idempotents_dict)
 
 #=
 N_M1 = reindexdims(F, (1,5,3,10))

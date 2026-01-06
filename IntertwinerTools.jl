@@ -98,7 +98,8 @@ function make_tubes_ij(fusion_rules_M, fusion_rules_N)
 end
 
 function dropnearzeros!(A::SparseArray; tol = 1e-12)
-    for (I, v) in collect(A.data)   # collect to avoid mutating during iteration
+    
+    for (I, v) in collect(A.data)   
         if abs(v) ≤ tol
             delete!(A.data, I)
         end
@@ -156,6 +157,7 @@ function make_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{Co
         #@tensor F_N_sliced_doubled_scaled[y_, p_, x_,r,s,l,n ] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * dY1[y__] * dY2[p__] * dY3[x__]
         #@tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled_scaled[y_, p_, x_, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,b,l ]
         @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ] * dY1[y__] * dY2[p__] * dY3[x__]
+        dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
 
         # --- Remove small values ---
         #dxdxpdy_F_M_dot_F_N = remove_zeros!(dxdxpdy_F_M_dot_F_N)
@@ -228,6 +230,7 @@ function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{
                            F_quantum_dims::Vector{Float64}, size_dict::Dict{Symbol, Int}, 
                            tubes_ij, tube_map_shape, N_M, N_N)
     cache = Dict{Tuple{Int,Int,Int}, SparseArray}()
+    sizehint!(cache, size_dict[:module_label_M]^3 * size_dict[:module_label_N]^3 )
 
     function f_ijk_sparse(i::Int, j::Int, k::Int)
         key = (i,j,k)
@@ -275,10 +278,8 @@ function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{
         @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ] * dY1[y__] * dY2[p__] * dY3[x__]
         dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
 
-        # --- Remove small values ---
-        #dxdxpdy_F_M_dot_F_N = remove_zeros!(dxdxpdy_F_M_dot_F_N)
-        #println("dxdxpdy_F_M_dot_F_N has hsape: $(size(dxdxpdy_F_M_dot_F_N))")
         # Convert linear indices to Cartesian indices
+        #=
         keys_array = collect(nonzero_keys(dxdxpdy_F_M_dot_F_N))                     
         nnz = length(keys_array)
         N_axes = ndims(dxdxpdy_F_M_dot_F_N)
@@ -288,29 +289,51 @@ function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{
             @inbounds coords_matrix[:, col] .= Tuple(CI)
         end
         Y1, Y2, Y3, n1, n2, n4, m1, m2, m3  = ntuple(d -> coords_matrix[d, :], N_axes)
+        =#
+        #=
+        N_axes = ndims(dxdxpdy_F_M_dot_F_N)
+        Y1, Y2, Y3, n1, n2, n4, m1, m2, m3 = ntuple(d -> [Tuple(k)[d] for k in nonzero_keys(dxdxpdy_F_M_dot_F_N)], N_axes)
+        nnz = length(Y1)
+        =#
+        #=
+        N_axes = ndims(dxdxpdy_F_M_dot_F_N)
+        keys_tuples = [Tuple(k) for k in nonzero_keys(dxdxpdy_F_M_dot_F_N)]
+        Y1, Y2, Y3, n1, n2, n4, m1, m2, m3 = ntuple(d -> [k[d] for k in keys_tuples], N_axes)
+        nnz = length(Y1)
 
-        vals = collect(nonzero_values(dxdxpdy_F_M_dot_F_N))
 
         index_a = [tubes_ij[(M_2, M_1, N_1, N_2, Y1_, m1_, n1_)] for (Y1_, m1_, n1_) in zip(Y1, m1, n1)]
         index_b = [tubes_ij[(M_3, M_2, N_2, N_3, Y2_, m2_, n2_)] for (Y2_, m2_, n2_) in zip(Y2, m2, n2)]
         index_c = [tubes_ij[(M_3, M_1, N_1, N_3, Y3_, m3_, n4_)] for (Y3_, m3_, n4_) in zip(Y3, m3, n4)]
 
-        #=
-        @show index_a
-        @show index_b
-        @show index_c
-        =#
-
         f_abc_DOK = Dict{CartesianIndex{3}, ComplexF64}()
+        sizehint!(f_abc_DOK, nnz )
+
         for idx in 1:nnz
             f_abc_DOK[CartesianIndex(index_a[idx], index_b[idx], index_c[idx])] = vals[idx]
         end
-        
+
+        vals = collect(nonzero_values(dxdxpdy_F_M_dot_F_N))
+        =#
+
+        keys_iterator = nonzero_keys(dxdxpdy_F_M_dot_F_N)
+        vals = collect(nonzero_values(dxdxpdy_F_M_dot_F_N))
+
+        f_abc_DOK = sizehint!(Dict{CartesianIndex{3}, ComplexF64}(), length(keys_iterator))
+
+        for (CI, val) in zip(keys_iterator, vals)
+            Y1, Y2, Y3, n1, n2, n4, m1, m2, m3 = Tuple(CI)
+            
+            idx_a = tubes_ij[(M_2, M_1, N_1, N_2, Y1, m1, n1)]
+            idx_b = tubes_ij[(M_3, M_2, N_2, N_3, Y2, m2, n2)]
+            idx_c = tubes_ij[(M_3, M_1, N_1, N_3, Y3, m3, n4)]
+            
+            f_abc_DOK[CartesianIndex(idx_a, idx_b, idx_c)] = val
+        end
+
         shape = (tube_map_shape[(M_2, M_1, N_1, N_2)], tube_map_shape[(M_3, M_2, N_2, N_3)], tube_map_shape[(M_3, M_1, N_1, N_3)])
         reindexed_f_symbol = SparseArray{ComplexF64,3}(f_abc_DOK, shape)
 
-        dropnearzeros!(reindexed_f_symbol; tol = 1e-10)
-        # Cache and return
         cache[key] = reindexed_f_symbol
         return reindexed_f_symbol
     end
