@@ -1,0 +1,36 @@
+
+"""
+LHS_einsum_string = " abcdefghij, klfdamnjop -> abcdefghiklmnop"
+RHS_einsum_string = " klbeaqngrs, kqcdemshtp, lbcmqfrtio -> abcdefghiklmnop "
+
+LHS = sparse.einsum(LHS_einsum_string, F3, F2)
+RHS =  sparse.einsum(RHS_einsum_string, F2, F2, F3)
+"""
+F_doubled_1 = reindexdims(F, (1,2,3,3,4,5,6,6,7,8,9,10))
+F_doubled_2 = reindexdims(F, (1,1,2,2,3,3,4,5,5,6,6,7,8,9,10))
+ω_doubled_1 = reindexdims(ω, (1,1,2,3,4,5,5,6,7,8,9,10))
+@tensor RHS[a,b,c,d,e,f,g,h,i,k,l,m,n,o,p] := F_doubled_1[k_,l_,b,b_,e_,a,q,q_,n,g,r,s]*F_doubled_2[k,k_,q_,q__,c,c_,d,e,e_,m,m_,s,h,t,p]*ω_doubled_1[l,l_,b_,c_,m_,q__,q,f,r,t,i,o]
+
+ω_doubled = reindexdims(ω, (1,2,3,3,4,4,5,5,6,7,8,9,10))
+@tensor LHS[a, b, c, d,e, f, g, h, i, k, l, m, n, o, p] := F[a_,b,c,d_,e,f_,g,h,i,j] * ω_doubled[k,l,f,f_,d,d_,a,a_,m,n,j,o,p]
+"""
+@tensor LHS[a, b, c, d, e, f, g, h, i, k, l, m, n, o, p] :=
+    F[a_, b, c, d_, e, f_, g, h, i, j] *
+    ω_doubled[k, l, f, f_, d, d_, a, a_, m, n, j, o, p]
+"""
+test = LHS-RHS
+#@show test
+#@show norm(test)
+
+mpo = reindexdims(F,(5,1,2,7,4,1,6,10,2,3,6,9,5,3,4,8))
+mpo = reshape(mpo,(128,128,128,128))
+
+peps = reindexdims(ω,(1,2,5,7,5,3,4,8,1,6,4,10,2,3,6,9))
+peps = reshape(peps,(128,128,128,128))
+
+@tensor lhs[-1 -2 -3 -4 -5 -6] := mpo[-1 -2 -3 1]*peps[-4 -5 1 -6]
+@tensor rhs[-1 -2 -3 -4 -5 -6] := peps[1 2 -3 -6]*mpo[-1 3 1 -4]*mpo[3 -2 2 -5]
+
+#@show norm(lhs-rhs)
+
+println(tubealgebra.d_algebra_squared)

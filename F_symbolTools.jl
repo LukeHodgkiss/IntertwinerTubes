@@ -1,6 +1,6 @@
 module FSymbolTools
 
-export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, reindexdims, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView
+export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, reindexdims, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!
 
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 using LinearAlgebra
@@ -72,6 +72,18 @@ end
 """
 Remove small entries from a SparseArrayKit array.
 """
+
+function dropnearzeros!(A::SparseArray; tol = 1e-12)
+    
+    for (I, v) in collect(A.data)   
+        if abs(v) ≤ tol
+            delete!(A.data, I)
+        end
+    end
+    return A
+end
+
+
 function remove_zeros!(A::SparseArray{T,N}, tol::Float64 = 1e-12) where {T,N}
     h = A.data   
     # Collect keys to delete to avoid modifying dict while iterating

@@ -6,7 +6,7 @@ using ..SparseAlgebraObjects: AlgebraVec, EigVec, SubAlgebraElementBlockL,
 using LinearAlgebra, Random
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 
-export eigen_decomposition_subalgebra_block, build_block, remove_overlapping_evec, remove_evec_in_same_block_ii, build_out_irrep, find_idempotents
+export eigen_decomposition_subalgebra_block, build_block, remove_overlapping_evec, remove_evec_in_same_block_ii, build_out_irrep, find_idempotents, dim_calc
 
 """
 include("SparseAlgebraObjects.jl")
@@ -88,6 +88,8 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
         end
     end
     #println(size(Q_old))
+    Q_old[abs.(Q_old) .< 1e-12] .= 0
+    Q_old = Q_old * Diagonal(exp.(-im .* angle.(Q_old[1, :])))
     return Q_old, d_irrep
 end
 
@@ -138,9 +140,7 @@ function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii;
     kept = Vector{EigVec}()
     for e1 in ED_ii
         overlaps = 0
-        #println("test new candiatate seed vec")
         for e2 in kept
-            #@show abs(inner_product(RX_iii * e1, LX_iii * e2))
             overlaps += abs(inner_product(RX_iii * e1, LX_iii * e2))
             if overlaps>tol_overlap
                 break
@@ -155,24 +155,16 @@ function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii;
 end
 
 # ---------- build_out_irrep ----------
-"""
-build_out_irrep(v::EigVec, i::Int, algebra::TubeAlgebra, rng) -> Dict{Tuple{Int,Int}, Matrix}
-
-For each j in 1:algebra.N_diag_blocks, if (j, v.subalgebra[1], v.subalgebra[2]) exists,
-build the block basis Q via build_block and store it under key (j, v.subalgebra[2]).
-"""
 function build_out_irrep(v::EigVec, i::Int, algebra::TubeAlgebra, random_left_linear_combination_ijk::Function, rng::AbstractRNG)
     irrep_blocks = Dict{Tuple{Int,Int}, Matrix{ComplexF64}}()
     d_subalgebra_iii = algebra.dim_ijk(i,i,i)[1]^2
     d_irrep = 0
 
-    #for j in 1:algebra.N_diag_blocks
     for j in i:algebra.N_diag_blocks
         if algebra.dim_ijk(j, v.subalgebra[1], v.subalgebra[2]) !== nothing
-            #println("alg: $((j, v.subalgebra[1], v.subalgebra[2])))")
-            #println(" building out block ")
+            
             Q, d_irrep = build_block(v, algebra, random_left_linear_combination_ijk, j, d_irrep, d_subalgebra_iii, rng)
-            irrep_blocks[(j, v.subalgebra[2])] = Q
+            if size(Q,1) > 0; irrep_blocks[(j, v.subalgebra[2])] = Q; end 
         end
     end
     return irrep_blocks, d_irrep
@@ -183,66 +175,58 @@ d_sum(d_list::Vector{Int}) = sum(x->x, d_list)
 
 # ---------- find_idempotents (main) ----------
 """
-    find_idempotents(algebra::TubeAlgebra) -> Vector{Dict{(Int,Int)=>Matrix}}
-
-Diagonalize each diagonal subalgebra, remove overlaps, build irreps,
-stop when total sum of squared irrep dims reaches algebra.d_algebra_squared.
+ 1.   Diagonalize each diagonal subalgebra, 
+ 2.   remove overlaps, 
+ 3.   build out irreps,
+ 4   stop when total sum of squared irrep dims reaches algebra.d_algebra_squared.
 """
 function find_idempotents(algebra::TubeAlgebra)
     irrep_projectors = Vector{Dict{Tuple{Int,Int}, Matrix{ComplexF64}}}()
     ED_global = Vector{EigVec}()
-    d_algebra_squared = algebra.d_algebra_squared
     rng = MersenneTwister(42)
     d_irrep_list = Int[]
-
-    #dim_ii_start = np.zeros(algebra.N_diag_blocks)
-    #size_block = algebra.dim_dict(ii,ii,ii)
-    #dim_ii_start[ii] += size(QR)[1]
-    #if dim_ii_start > size_block
-    #   break
 
 
     for ii in 1:algebra.N_diag_blocks
 
-        # diagonalize block (ii,ii)
-        #println("Considering block ED: $(ii)")
         ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
-
-        # remove overlapping vectors between the blocks
         ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii, ED_global)
 
-        # remove overlapping vectors within the block
-        #RX_iii = conj!(random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng))
         RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
-        #RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=true, rng=rng)
-
         LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
-        #LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=true, rng=rng)
-
         ED_ii_trimmed = remove_evec_in_same_block_ii(ED_ii_ortho, RX_iii, LX_iii)
 
         append!(ED_global, ED_ii_trimmed)
 
-        # build irreps from each unique eigenvector
         for vec in ED_ii_trimmed
-            #println("build irreps from each unique eigenvector")
-            #@show vec
             irrep, d_irrep = build_out_irrep(vec, ii, algebra, random_left_linear_combination_ijk, rng)
-            d_irrep = sum(size(Q)[1]^2 for Q in values(irrep))
-            #println("d_irrep $d_irrep")
-            #d_irrep = length(values(irrep))
+            d_irrep = sum(size(Q)[2]^2 for Q in values(irrep))
             push!(irrep_projectors, irrep)
             push!(d_irrep_list, d_irrep)   
             #=
-            if d_sum(d_irrep_list) >= d_algebra_squared
+            if d_sum(d_irrep_list) >= algebra.d_algebra_squared
                 print("We saved time? :)")
                 return irrep_projectors
             end
             =#
         end
     end
-
+    #@show sum(d_irrep_list)
     return irrep_projectors
+end
+
+
+function dim_calc(idempotents_dict)
+    dim_alg_glob = 0
+    for irrep in idempotents_dict
+        println("Irrep has size: $(length(irrep))")
+        
+        for (ij, proj) in irrep
+            println("Projector $(ij) has shape $(size(proj)) ")
+            dim_alg_glob=dim_alg_glob+((size(proj)[2])^2)
+        end 
+    end
+    #@show dim_alg_glob
 end
 
 end # Module
