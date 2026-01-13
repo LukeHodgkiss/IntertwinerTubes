@@ -1,6 +1,6 @@
 module FSymbolTools
 
-export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, reindexdims, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!
+export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, reindexdims, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G
 
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 using LinearAlgebra
@@ -264,8 +264,8 @@ end
 function F_vec_G(cayley_table)
     order = size(cayley_table, 1)
     shape = (order, order, order, order, order, order, 1,1,1,1)
-    F = DOK{Float64}(shape...)
-
+    F_DOK = Dict{CartesianIndex{10}, ComplexF64}()
+    
     for g1 in 1:order
         for g2 in 1:order
             g12 = cayley_table[g1,g2]
@@ -273,29 +273,78 @@ function F_vec_G(cayley_table)
                 g23  = cayley_table[g2,g3]
                 g123 = cayley_table[g1, g23]
 
-                idx = (g1, g2, g3, g123, g12, g23, 1,1,1,1)
-                F[idx] = 1.0
+                idx = CartesianIndex((g1, g2, g3, g123, g12, g23, 1,1,1,1))
+                F_DOK[idx] = 1.0
             end
         end
     end
 
-    return F
+    return SparseArray{ComplexF64, 10}(F_DOK, shape)
 end
 
 function F_mod_cat_Vec_Vec_G(cayley_table)
     order = size(cayley_table, 1)
     shape = (1, order, order, 1, 1, order, 1,1,1,1)
-    F = DOK{Float64}(shape...)
+    F_DOK = Dict{CartesianIndex{10}, ComplexF64}()
 
     for g1 in 1:order
         for g2 in 1:order
             g1g2 = cayley_table[g1,g2]
-            idx = (1, g1, g2, 1, 1, g1g2, 1,1,1,1)
-            F[idx] = 1.0
+            idx = CartesianIndex((1, g1, g2, 1, 1, g1g2, 1,1,1,1))
+
+            F_DOK[idx] = 1.0
         end
     end
+    F = SparseArray{ComplexF64, 10}(F_DOK, shape)
 
     return F
 end
+
+
+function F_mod_cat_Vec_G_Vec_G(cayley_table)
+    order = size(cayley_table, 1)
+    shape = (order, order, order, order, order, order, 1,1,1,1)
+    F_DOK = Dict{CartesianIndex{10}, ComplexF64}()
+
+    for g1 in 1:order
+        for g2 in 1:order
+            for g3 in 1:order
+            g1g2 = cayley_table[g1,g2]
+            g2g3 = cayley_table[g2,g3]
+            g1g2g3 = cayley_table[g1g2,g3]
+
+                idx = CartesianIndex((g1,g2,g3,g1g2g3, g1g2, g2g3, 1,1,1,1))
+                
+                F_DOK[idx] = 1.0
+            end
+        end
+    end
+    F = SparseArray{ComplexF64, 10}(F_DOK, shape)
+
+    return F
+end
+
+function make_mpo(F)
+    mpo = reindexdims(F,(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))
+    mpo = reshape(mpo,(prod(size(F)[[5,1,2,7]]),prod(size(F)[[4,1,6,10]]),prod(size(F)[[2,3,6,9]]),prod(size(F)[[5,3,4,8]])))
+    return mpo
+end
+
+function make_peps(F)
+    peps = reindexdims(F,(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9))
+    peps = reshape(peps,(prod(size(F)[[1,2,5,7]]),prod(size(F)[[5,3,4,8]]),prod(size(F)[[1,6,4,10]]),prod(size(F)[[2,3,6,9]])))
+    return peps
+end
+
+function pentagon_eqn(F1, F2, F3, F4, F5)
+    
+    @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 -2 -3 1]* make_peps(F2)[-4 -5 1 -6]
+    @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6]*make_mpo(F4)[-1 3 1 -4]*make_mpo(F5)[3 -2 2 -5]
+
+    test = norm(lhs-rhs)
+    @show test
+    return test
+end
+
 
 end # module

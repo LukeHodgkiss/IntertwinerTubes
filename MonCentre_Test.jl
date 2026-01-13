@@ -10,7 +10,6 @@ using StaticArrays: SVector
 using Profile
 using ProfileView
 
-
 # Importing Locally
 include("SparseAlgebraObjects.jl")
 using .SparseAlgebraObjects: TubeAlgebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, create_left_ijk_basis, create_right_ijk_basis
@@ -88,6 +87,7 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 ##########################
 # -  Doubled Haagerup  - #
 ##########################
+#=
 
 # Haagerup example
 index_file = "/home/lukehodgkiss/Documents/Part3Essay/Algebra data/Luke_Haagerup/Luke_Haagerup_ind.csv"
@@ -126,9 +126,9 @@ quantum_dims = vec(Haagerup_dim_mat_file["dimD"])
 #quantum_dims = Haagerup_dim_mat_file["dimM"]
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
-#=
 
 =#
+
 
 d_algebra = 10000
 N_M, N_M_sparsetensor = create_fusion_rules(F)

@@ -47,7 +47,7 @@ for the block (j, i) by repeatedly applying random left elements `L_X(j, left, r
 Returns Q (columns = orthonormal basis vectors).
 """
 function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_irrep::Int, d_subalgebra_iii::Int, rng::AbstractRNG; 
-    tol_rank::Float64 = 1e-10)
+    tol_rank::Float64 = 1e-9)
     # initial vector produced by applying one random L
     L0 = L_X(algebra, j, v.subalgebra[1], v.subalgebra[2]; rng=rng)
     #@show j, v.subalgebra[1], v.subalgebra[2]
@@ -87,9 +87,10 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
             break
         end
     end
-    #println(size(Q_old))
+    
     Q_old[abs.(Q_old) .< 1e-12] .= 0
     Q_old = Q_old * Diagonal(exp.(-im .* angle.(Q_old[1, :])))
+    #==#
     return Q_old, d_irrep
 end
 
@@ -188,7 +189,7 @@ function find_idempotents(algebra::TubeAlgebra)
 
 
     for ii in 1:algebra.N_diag_blocks
-
+        @show ii
         ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
         ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii, ED_global)
 
@@ -200,9 +201,12 @@ function find_idempotents(algebra::TubeAlgebra)
 
         for vec in ED_ii_trimmed
             irrep, d_irrep = build_out_irrep(vec, ii, algebra, random_left_linear_combination_ijk, rng)
-            d_irrep = sum(size(Q)[2]^2 for Q in values(irrep))
-            push!(irrep_projectors, irrep)
-            push!(d_irrep_list, d_irrep)   
+            if length(irrep) > 0 # this shuldnt be neccesary
+                push!(irrep_projectors, irrep)
+                d_irrep = sum(size(Q)[2]^2 for Q in values(irrep))
+                push!(d_irrep_list, d_irrep)
+            end
+               
             #=
             if d_sum(d_irrep_list) >= algebra.d_algebra_squared
                 print("We saved time? :)")
@@ -224,6 +228,7 @@ function dim_calc(idempotents_dict)
         for (ij, proj) in irrep
             println("Projector $(ij) has shape $(size(proj)) ")
             dim_alg_glob=dim_alg_glob+((size(proj)[2])^2)
+            #println(proj)
         end 
     end
     #@show dim_alg_glob

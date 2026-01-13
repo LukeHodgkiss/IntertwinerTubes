@@ -60,7 +60,6 @@ function create_tube_map(N_M, N_N, size_dict)
                 
                 @inbounds for m in 1:val_M
                     @inbounds for n in 1:val_N
-                        
                         key = (M1, M2, N2, N1, Y, m, n)
                         tube_map_shape[(M1, M2, N2, N1)] = get(tube_map_shape, (M1, M2, N2, N1), 0) + 1 # linear_index
                         
@@ -68,7 +67,24 @@ function create_tube_map(N_M, N_N, size_dict)
                         tube_map_inv[key_inv] = (Y, m, n)
 
                         tube_map[key] = tube_map_shape[(M1, M2, N2, N1)] 
+                        #=
+                        key = (M2, M1, N1, N2, Y, n, m)
+                        tube_map_shape[(M2, M1, N1, N2)] = get(tube_map_shape, (M2, M1, N1, N2), 0) + 1 # linear_index
                         
+                        key_inv = (M2, M1, N1, N2, tube_map_shape[(M2, M1, N1, N2)])
+                        tube_map_inv[key_inv] = (Y, n, m)
+
+                        tube_map[key] = tube_map_shape[(M2, M1, N1, N2)] 
+                        =#
+                        #=
+                        key = (M1, M2, N1, N2, Y, m, n)
+                        tube_map_shape[(M1, M2, N1, N2)] = get(tube_map_shape, (M1, M2, N1, N21), 0) + 1 # linear_index
+                        
+                        key_inv = (M1, M2, N1, N2, tube_map_shape[(M1, M2, N1, N2)])
+                        tube_map_inv[key_inv] = (Y, m, n)
+
+                        tube_map[key] = tube_map_shape[(M1, M2, N1, N2)] 
+                        =#
                     end
                 end
             end
@@ -79,13 +95,13 @@ function create_tube_map(N_M, N_N, size_dict)
 end
 
 
-function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{ComplexF64, 10}, 
+function create_f_ijk_sparse(F_M::SparseArray{ComplexF64, 10}, F_N::SparseArray{ComplexF64, 10}, 
                            F_quantum_dims::Vector{Float64}, size_dict::Dict{Symbol, Int}, 
                            tubes_ij, tube_map_shape, N_M, N_N)
     cache = Dict{Tuple{Int,Int,Int}, SparseArray}()
     sizehint!(cache, size_dict[:module_label_M]^3 * size_dict[:module_label_N]^3 )
 
-    MN_to_a_map = CartesianIndices((size_dict[:module_label_N], size_dict[:module_label_M]))
+    MN_to_a_map = CartesianIndices((size_dict[:module_label_M], size_dict[:module_label_N]))
 
     function f_ijk_sparse(i::Int, j::Int, k::Int)
         key = (i,j,k)
@@ -105,6 +121,7 @@ function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{
 
         # --- Quantum dimension prefactors ---
         sqrtd = sqrt.(F_quantum_dims)
+        #sqrtd = F_quantum_dims.^(1/4)
         dY1 = SparseArray(sqrtd)
         dY2 = SparseArray(sqrtd)
         dY3 = SparseArray(1.0 ./ sqrtd)
@@ -114,6 +131,7 @@ function create_f_ijk_sparse(F_N::SparseArray{ComplexF64, 10}, F_M::SparseArray{
         F_M_sliced_doubled = conj!(reindexdims(F_M_slice, (1,1,2,2,3,3,4,5,6,7)))
         
         @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ] * dY1[y__] * dY2[p__] * dY3[x__]
+        
         dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
 
         keys_iterator = nonzero_keys(dxdxpdy_F_M_dot_F_N)
@@ -153,7 +171,7 @@ end
 function create_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij, tube_map_shape, N_M, N_N)
     cache = Dict{Tuple{Int,Int,Int}, Tuple{Int,Int,Int}}()
 
-    MN_to_a_map = CartesianIndices((size_dict[:module_label_N], size_dict[:module_label_M]))
+    MN_to_a_map = CartesianIndices((size_dict[:module_label_M], size_dict[:module_label_N]))
 
     function dim_ijk(i,j,k)
         key = (i,j,k)
@@ -183,8 +201,6 @@ function create_dim_dict(size_dict::Dict{Symbol, Int}, tubes_ij, tube_map_shape,
     end
 end
 
-
-
 # ----------------------------------------
 # - Post Processing
 # ----------------------------------------
@@ -200,7 +216,7 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
     mod_N = size_dict[:module_label_N]
     mod_M = size_dict[:module_label_M]
 
-    MN_to_a_map = CartesianIndices((size_dict[:module_label_N], size_dict[:module_label_M]))
+    MN_to_a_map = CartesianIndices((size_dict[:module_label_M], size_dict[:module_label_N]))
     
 
     keys_vec = Vector{SVector{10,Int}}()
@@ -209,6 +225,7 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
     sizehint!(vals_vec, length(F.data))
 
     for irrep in 1:N_irrep
+        println("# -- Irrep $(irrep) -- #")
         iproj = irrep_projectors[irrep]
         k = first(keys(iproj))[2]
 
@@ -230,16 +247,55 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
 
                 for a in eachindex(T_a)
                     Y, m, n = tube_map_inv[(M1, M2, N2, N1, a)]
+                    #@show  size(Q_jk), size(T_a[a]), size(adjoint(Q_ik))
+                    #=
+                    @show (i,k), (i,j,k), (j,k)
+                    @show  size(adj_Q_ik), size(T_a[a]), size(Q_jk)
+                    =#
+                    #ρ = adj_Q_ik * T_a[a] * Q_jk * sqrt(q_dim_a[N2])/(sqrt(q_dim_a[N1])*sqrt(q_dim_a[Y])) #/ sqrt(q_dim_a[Y]) #
+                    ρ = adj_Q_ik * T_a[a] * Q_jk * sqrt(q_dim_a[N1])/(sqrt(q_dim_a[N2])*sqrt(q_dim_a[Y])) #/ sqrt(q_dim_a[Y]) #
 
-                    ρ = adj_Q_ik * T_a[a] * Q_jk /sqrt(q_dim_a[Y])
+                    #ρ = adjoint(adj_Q_ik * T_a[a] * Q_jk) * sqrt(q_dim_a[N2])/(sqrt(q_dim_a[N1])*sqrt(q_dim_a[Y]))
+                    #ρ = Q_jk * T_a[a] * adjoint(Q_ik) #* sqrt(q_dim_a[N2])/(sqrt(q_dim_a[N1])*sqrt(q_dim_a[Y]))
+                    
+                    #/ sqrt(q_dim_a[Y]) # * sqrt(q_dim_a[N1])/sqrt(q_dim_a[N2])
                     
                     @inbounds for col in axes(ρ,2), row in axes(ρ,1)
                         val = ρ[row,col]
                         iszero(val) && continue
+                        #F[M2, Y1, Y, M1, M2, Y, 1, :, 1, :]
+                        #key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, row, n, m, col)
+                        #key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, row, n, m, col)
+                        #key = SVector{10,Int}( irrep, N1, Y, M2, M1, N2, row, n, m, col)
+                        #key = SVector{10,Int}( irrep, M2, Y, N1, N2, M1, row, n, m, col) # this is wokring for vecG over vecG
+                        #key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, row, m, n, col)
+                        key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, m, row, col, n)
 
+                        
+                        #key = SVector{10,Int}( Y, M1, irrep, N2, N1, M2, col, n, m, row)
+
+                        #key = SVector{10,Int}( Y, M1, irrep, N2, N1, M2, m, col, row, n)
+                        
+                        # Y, M1, irrep, N2, N1, M2, row, m, n, col
+                        # 'M4', 'Y1', 'Y2', 'M5', 'M6', 'Y3', 's', 't', 'l', 'j'
+                        # irrep, M1, Y, N2, N1, M2, row, m, n, col
+                        #=
                         key = SVector{10,Int}(
-                            irrep, M1, Y, N2, N1, M2, row, n, m, col
-                        )
+                             M2, irrep, Y, N2, N1, M1, row, n, m, col
+                        )=#
+
+                        #=
+                        new_coords = np.vstack([np.full(N_nz, irrep),
+                                            np.full(N_nz, M_1),
+                                            np.full(N_nz, Y),
+                                            np.full(N_nz, N_2),
+                                            np.full(N_nz, N_1),
+                                            np.full(N_nz, M_2),
+                                            rows,
+                                            np.full(N_nz, n),
+                                            np.full(N_nz, m),
+                                            cols])
+                        =#
                         push!(keys_vec, key)
                         push!(vals_vec, val)
                     end
@@ -255,12 +311,12 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
         end
     end
     shape = Tuple(maxvals)
-
+    tol = 1e-10
     dok = Dict(
         CartesianIndex(Tuple(k)) => v
-        for (k,v) in zip(keys_vec, vals_vec)
+        for (k,v) in zip(keys_vec, vals_vec) if abs(v)> tol
     )
-
+    
     return SparseArray{ComplexF64,10}(dok, shape)
 end
 
