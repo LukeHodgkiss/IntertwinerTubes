@@ -25,6 +25,14 @@ using .Saving_Stuff
 
 # Read in F-symbol
 println("Reading in F symbol data")
+
+
+####################################
+# -- Input Data for intertwiner -- #
+####################################
+#= Input is the 3F symbol, ω = 2F, U = 1F, then we out put 0F for Boris =#
+
+
 ############################
 # -  Doubled Fibonnacci  - #
 ############################
@@ -71,7 +79,6 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 # -  Rep A4 over Rep A4 Rep A4  - #
 ###################################
 #=
-
 vars = matread("/home/lukehodgkiss/Documents/FindingTubesJulia/RepA4Data/Luke_F.mat")
 F = SparseArray{ComplexF64}(vars["F"])
 quantum_dims = vec([1.0 1.0 1.0 3.0])
@@ -86,9 +93,7 @@ size_dict = Dict(:module_label => size(F, 1),
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
 F_M = F
-F_N = F
-conj!(F_M)
-
+F_N = deepcopy(F)
 =#
 
 ##########################
@@ -153,7 +158,7 @@ cayley_table_S3 = [ 1 2 3 4 5 6;
 F_M = F_mod_cat_Vec_Vec_G(cayley_table_S3)
 quantum_dims = vec(ones(size(cayley_table_S3, 1)))
 F = F_M
-F_N = F_M
+#F_N = F_M
 
 size_dict = Dict(:module_label => size(F, 1),
                  :module_label_N => size(F, 1),
@@ -168,6 +173,7 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 ########################## 
 # -  Vec_G over Vec_G  - #
 ########################## 
+
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -175,15 +181,16 @@ cayley_table_S3 = [ 1 2 3 4 5 6;
                     5 3 6 1 4 2;
                     6 4 5 2 3 1 ]
 
+#g1,g2 != g1g2, g2g3 for g1 = 4, g2 = 1
+
 F_N = F_mod_cat_Vec_G_Vec_G(cayley_table_S3)
 quantum_dims = vec(ones(size(cayley_table_S3, 1)))
-F = F_N
+#F = F_N
 F_M = F_N
 size_dict = Dict(
                  :module_label_N => size(F_N, 1),
                  :module_label_M => size(F_M, 1),
                  :fusion_label => size(F_N, 2),
-                 :multiplicity_label => size(F)[end],
                  :multiplicity_label_M => size(F_M)[end],
                  :multiplicity_label_N => size(F_N)[end])
 
@@ -194,9 +201,11 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
 println("Finished reading in F symbol data")
 
-println("Sparsity of F: $(length(nonzero_keys(F))/ prod(size(F)))")
+println("Sparsity of F_N: $(length(nonzero_keys(F_N))/ prod(size(F_N)))")
+println("Sparsity of F_M: $(length(nonzero_keys(F_M))/ prod(size(F_M)))")
 
 
+@show size(F_M)
 d_algebra = 27863 
 N_M, N_M_sparsetensor = create_fusion_rules(F_M)
 N_N, N_N_sparsetensor = create_fusion_rules(F_N)
@@ -204,13 +213,18 @@ tubes_map, tube_map_shape, tube_map_inv = create_tube_map(N_M, N_N, size_dict)
 f_ijk_sparse = create_f_ijk_sparse(F_M, F_N, quantum_dims, size_dict, tubes_map, tube_map_shape, N_M, N_N)
 dimension_dict = create_dim_dict(size_dict, tubes_map, tube_map_shape, N_M, N_N)
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
+
+println(" Fusion Rules ")
+@show N_M
+
+println(" Non-zero Hom spaces ")
+@show tube_map_shape
 println("This is the way")
 #@show keys(tube_map_shape)
 @show length(tube_map_shape) 
 
-
 idempotents_dict = find_idempotents(tubealgebra) # Compilation
-#dim_calc(idempotents_dict)
+dim_calc(idempotents_dict)
 
 #####################
 # -  Idempotents  - #
@@ -230,7 +244,7 @@ ProfileView.view()
 ############################## 
 # -  Module Associator: ω  - #
 ##############################
-
+println("Computing ω")
 @time ω = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, quantum_dims, create_left_ijk_basis, F)
 println("Sparsity of ω: $(length(nonzero_keys(ω))/ prod(size(ω)))")
 save_ω(ω)

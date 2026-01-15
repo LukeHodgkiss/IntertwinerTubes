@@ -189,7 +189,7 @@ function find_idempotents(algebra::TubeAlgebra)
 
 
     for ii in 1:algebra.N_diag_blocks
-        @show ii
+        
         ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
         ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii, ED_global)
 

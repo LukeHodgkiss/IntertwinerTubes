@@ -19,9 +19,10 @@ index_to_tuple(idx::Int, shape::NTuple) = Tuple(CartesianIndices(shape)[idx])
 
 function create_fusion_rules(F)
     #hom_space =F[M2, Y1, Y, M1, M2, Y, 1, :, 1, :]
-
     hom_space = slice_sparse_tensor(F, Dict(2=>1, 7=>1, 9=>1)) #F[M2, Y1, Y, M1, M2, Y, 1, :, 1, :] # 1=>M2, 3=>Y, 4=>M1, 5=>M2, 6=>Y, 
     F = reindexdims(hom_space, (3,1,2,6)) #M1, M2, Y: k
+    #F = reindexdims(hom_space, (3,1,2,7)) #M1, M2, Y: k
+
 
     N_M1 = Dict{CartesianIndex{3}, Int}()
 
@@ -85,6 +86,7 @@ function create_tube_map(N_M, N_N, size_dict)
 
                         tube_map[key] = tube_map_shape[(M1, M2, N1, N2)] 
                         =#
+                        
                     end
                 end
             end
@@ -102,6 +104,13 @@ function create_f_ijk_sparse(F_M::SparseArray{ComplexF64, 10}, F_N::SparseArray{
     sizehint!(cache, size_dict[:module_label_M]^3 * size_dict[:module_label_N]^3 )
 
     MN_to_a_map = CartesianIndices((size_dict[:module_label_M], size_dict[:module_label_N]))
+    
+    # --- Quantum dimension prefactors ---
+    sqrtd = sqrt.(F_quantum_dims)
+    #sqrtd = F_quantum_dims.^(1/4)
+    dY1 = SparseArray(sqrtd)
+    dY2 = SparseArray(sqrtd)
+    dY3 = SparseArray(1.0 ./ sqrtd)
 
     function f_ijk_sparse(i::Int, j::Int, k::Int)
         key = (i,j,k)
@@ -115,23 +124,19 @@ function create_f_ijk_sparse(F_M::SparseArray{ComplexF64, 10}, F_N::SparseArray{
         M_2, N_2 = Tuple(MN_to_a_map[j])
         M_3, N_3 = Tuple(MN_to_a_map[k])
 
+        
         # --- Slice tensors ---
-        F_N_slice = slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
+        F_N_slice= slice_sparse_tensor(F_N, Dict(1=>N_1, 4=>N_3, 5=>N_2))
         F_M_slice = slice_sparse_tensor(F_M, Dict(1=>M_1, 4=>M_3, 5=>M_2))
-
-        # --- Quantum dimension prefactors ---
-        sqrtd = sqrt.(F_quantum_dims)
-        #sqrtd = F_quantum_dims.^(1/4)
-        dY1 = SparseArray(sqrtd)
-        dY2 = SparseArray(sqrtd)
-        dY3 = SparseArray(1.0 ./ sqrtd)
+        
 
         # --- Contractions ---
         F_N_sliced_doubled = reindexdims(F_N_slice, (1,1,2,2,3,3,4,5,6,7))
         F_M_sliced_doubled = conj!(reindexdims(F_M_slice, (1,1,2,2,3,3,4,5,6,7)))
         
-        @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ] * dY1[y__] * dY2[p__] * dY3[x__]
-        
+        @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * conj(F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ]) * dY1[y__] * dY2[p__] * dY3[x__]
+        #@tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * conj(F_M_sliced_doubled[y, y_,p, p_, x, x_,a,l,m,b]) * dY1[y__] * dY2[p__] * dY3[x__]
+
         dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
 
         keys_iterator = nonzero_keys(dxdxpdy_F_M_dot_F_N)
@@ -140,16 +145,24 @@ function create_f_ijk_sparse(F_M::SparseArray{ComplexF64, 10}, F_N::SparseArray{
         f_abc_DOK = sizehint!(Dict{CartesianIndex{3}, ComplexF64}(), length(keys_iterator))
 
         for (CI, val) in zip(keys_iterator, vals)
-            Y1, Y2, Y3, n1, n2, n4, m1, m2, m3 = Tuple(CI)
-            
+            Y1, Y2, Y3, n1, n2, n3, m1, m2, m3 = Tuple(CI)
+            println(val)
+
             idx_a = tubes_ij[(M_2, M_1, N_1, N_2, Y1, m1, n1)]
             idx_b = tubes_ij[(M_3, M_2, N_2, N_3, Y2, m2, n2)]
-            idx_c = tubes_ij[(M_3, M_1, N_1, N_3, Y3, m3, n4)]
-            
+            idx_c = tubes_ij[(M_3, M_1, N_1, N_3, Y3, m3, n3)]
+            #=
+            idx_a = tubes_ij[(M_1, M_2, N_2, N_1, Y1, m1, n1)]
+            idx_b = tubes_ij[(M_2, M_3, N_3, N_2, Y2, m2, n2)]
+            idx_c = tubes_ij[(M_1, M_3, N_3, N_1, Y3, m3, n3)]
+            =#
+
             f_abc_DOK[CartesianIndex(idx_a, idx_b, idx_c)] = val
         end
 
         shape = (tube_map_shape[(M_2, M_1, N_1, N_2)], tube_map_shape[(M_3, M_2, N_2, N_3)], tube_map_shape[(M_3, M_1, N_1, N_3)])
+        #shape = (tube_map_shape[(M_1, M_2, N_2, N_1)], tube_map_shape[(M_2, M_3, N_3, N_2)], tube_map_shape[(M_1, M_3, N_3, N_1)])
+        
         reindexed_f_symbol = SparseArray{ComplexF64,3}(f_abc_DOK, shape)
 
         cache[key] = reindexed_f_symbol
@@ -225,7 +238,7 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
     sizehint!(vals_vec, length(F.data))
 
     for irrep in 1:N_irrep
-        println("# -- Irrep $(irrep) -- #")
+        #println("# -- Irrep $(irrep) -- #")
         iproj = irrep_projectors[irrep]
         k = first(keys(iproj))[2]
 
@@ -246,7 +259,9 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
                 T_a = create_left_ijk_basis(algebra, i, j, k).basis
 
                 for a in eachindex(T_a)
-                    Y, m, n = tube_map_inv[(M1, M2, N2, N1, a)]
+                    #Y, m, n = tube_map_inv[(M1, M2, N2, N1, a)]
+                    Y, m, n = tube_map_inv[(M2, M1, N1, N2, a)] # this works for Vec_VecG VecG_VecG
+
                     #@show  size(Q_jk), size(T_a[a]), size(adjoint(Q_ik))
                     #=
                     @show (i,k), (i,j,k), (j,k)
@@ -270,6 +285,8 @@ function construct_irreps( algebra, irrep_projectors, size_dict, tube_map_inv::D
                         #key = SVector{10,Int}( irrep, M2, Y, N1, N2, M1, row, n, m, col) # this is wokring for vecG over vecG
                         #key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, row, m, n, col)
                         key = SVector{10,Int}( irrep, M1, Y, N2, N1, M2, m, row, col, n)
+                        #key = SVector{10,Int}( irrep, M1, N2, N1, Y, M2, m, row, col, n)
+
 
                         
                         #key = SVector{10,Int}( Y, M1, irrep, N2, N1, M2, col, n, m, row)

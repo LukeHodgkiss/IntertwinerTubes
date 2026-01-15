@@ -23,6 +23,19 @@ include("Saving_Stuff.jl")
 using .Saving_Stuff
 
 # Read in F-symbol
+
+
+########################################
+# -- Input Data for monoidal centre -- #
+########################################
+
+#= D*_M module cat F symbols are the input, these are the 2F symbols (the irreps)  
+# then choice of N mod cat over 
+=#
+
+
+
+
 println("Reading in F symbol data")
 
 ###################################
