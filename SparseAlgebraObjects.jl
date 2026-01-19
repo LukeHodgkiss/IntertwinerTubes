@@ -245,6 +245,7 @@ function create_left_ijk_basis(t::TubeAlgebra, i,j,k)
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
     f_dense = Array(t.f_ijk_sparse(i,j,k))
     T_a_ijk = [Matrix(transpose(f_dense[a,:,:])) for a in 1:d_a]
+
     ijk_irrep_basis = SubalgebraIrrep(i, j, k, T_a_ijk)
     t.left_cache[key] = ijk_irrep_basis
     return ijk_irrep_basis

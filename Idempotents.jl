@@ -88,7 +88,7 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
         end
     end
     
-    Q_old[abs.(Q_old) .< 1e-12] .= 0
+    Q_old[abs.(Q_old) .< 1e-10] .= 0
     Q_old = Q_old * Diagonal(exp.(-im .* angle.(Q_old[1, :])))
     #==#
     return Q_old, d_irrep

@@ -30,13 +30,14 @@ println("Reading in F symbol data")
 ####################################
 # -- Input Data for intertwiner -- #
 ####################################
-#= Input is the 3F symbol, ω = 2F, U = 1F, then we out put 0F for Boris =#
-
+#= Input is the 3F symbol, ω = 2F, U = 1F, then we output 0F  =#
 
 ############################
 # -  Doubled Fibonnacci  - #
 ############################
 #=
+=#
+
 # F Symbol Fibonnacci
 index_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_ind.csv"
 value_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_var.csv"
@@ -59,26 +60,27 @@ end
 # Fib shape
 F3_shape = (2,4,4,2,2,4,2,2,1,2)
 size_dict = Dict(
-    :module_label      => F3_shape[1],
     :module_label_N    => F3_shape[1],
     :module_label_M    => F3_shape[1],
     :fusion_label      => F3_shape[2],
-    :multiplicity_label=> F3_shape[end],
-    :multiplicity_label_M => size(F)[end],
-    :multiplicity_label_N => size(F)[end])
+    :multiplicity_label_M => F3_shape[end],
+    :multiplicity_label_N => F3_shape[end]
 )
 
 ϕ = (1+5^0.5)/2.0
 quantum_dims = [1,ϕ,ϕ, ϕ^2]
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
+F_N = deepcopy(F)
+F_M = deepcopy(F)
+#@show nonzero_values(F)
 
-=#
 
 ###################################
 # -  Rep A4 over Rep A4 Rep A4  - #
 ###################################
 #=
+
 vars = matread("/home/lukehodgkiss/Documents/FindingTubesJulia/RepA4Data/Luke_F.mat")
 F = SparseArray{ComplexF64}(vars["F"])
 quantum_dims = vec([1.0 1.0 1.0 3.0])
@@ -92,8 +94,9 @@ size_dict = Dict(:module_label => size(F, 1),
 
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
-F_M = F
+F_M = deepcopy(F)
 F_N = deepcopy(F)
+
 =#
 
 ##########################
@@ -145,6 +148,7 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 # -  Vec over Vec G  - #
 ########################
 #=
+
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -169,11 +173,11 @@ size_dict = Dict(:module_label => size(F, 1),
                  :multiplicity_label_N => size(F)[end])
 
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+#=
 =#
 ########################## 
 # -  Vec_G over Vec_G  - #
 ########################## 
-
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -185,8 +189,8 @@ cayley_table_S3 = [ 1 2 3 4 5 6;
 
 F_N = F_mod_cat_Vec_G_Vec_G(cayley_table_S3)
 quantum_dims = vec(ones(size(cayley_table_S3, 1)))
-#F = F_N
-F_M = F_N
+#F = deepcopy(F_N)
+#F_M = deepcopy(F_N)
 size_dict = Dict(
                  :module_label_N => size(F_N, 1),
                  :module_label_M => size(F_M, 1),
@@ -195,7 +199,6 @@ size_dict = Dict(
                  :multiplicity_label_N => size(F_N)[end])
 
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
-#=
 =#
 
 
@@ -214,11 +217,28 @@ f_ijk_sparse = create_f_ijk_sparse(F_M, F_N, quantum_dims, size_dict, tubes_map,
 dimension_dict = create_dim_dict(size_dict, tubes_map, tube_map_shape, N_M, N_N)
 tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
 
+#=
+@show dimension_dict(16,16,16)
+@show tube_map_inv[(4,4,4,4,7)]
+@show f_ijk_sparse(16,16,16)[3,3,3,1,1,1,1,1,1]
+
+for key in keys(tubes_map)
+    if key[1]==4 && key[2]==4 && key[3]==4 && key[4]==4
+        println(key, tubes_map[key], tube_map_inv[key[1:4]..., tubes_map[key]])
+    end
+end
+
+f_abc = sort([Tuple(key) for key in nonzero_keys(f_ijk_sparse(16,16,16))])
+for f in f_abc
+    println(f) 
+end
+=#
+
 println(" Fusion Rules ")
-@show N_M
+#@show N_M
 
 println(" Non-zero Hom spaces ")
-@show tube_map_shape
+#@show tube_map_shape
 println("This is the way")
 #@show keys(tube_map_shape)
 @show length(tube_map_shape) 
@@ -271,8 +291,8 @@ end
 
 function pentagon_eqn(F1, F2, F3, F4, F5)
     
-    @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 -2 -3 1]* make_peps(F2)[-4 -5 1 -6]
-    @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6]*make_mpo(F4)[-1 3 1 -4]*make_mpo(F5)[3 -2 2 -5]
+    @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 -2 -3 1] * make_peps(F2)[-4 -5 1 -6]
+    @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6] * make_mpo(F4)[-1 3 1 -4] * make_mpo(F5)[3 -2 2 -5]
 
     test = norm(lhs-rhs)
     @show test
@@ -288,8 +308,11 @@ peps_N = make_peps(F_N)
 @show size(peps_N)
 
 pentagon_eqn(ω, F_N, F_M, ω, ω)
+
 #pentagon_eqn(F_N, F_N, F_N, F_N, F_N)
 #pentagon_eqn(ω, ω, ω, ω, ω)
+#pentagon_eqn(F, ω, ω, F, F)
+
 
 #@show dropnearzeros!(ω - F)
 
