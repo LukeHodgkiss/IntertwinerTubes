@@ -1,7 +1,7 @@
 #module TestPackages
 
 # Importing Paxkages
-using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
+using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs, reindexdims
 using MAT
 using LinearAlgebra
 using TensorOperations
@@ -36,7 +36,6 @@ println("Reading in F symbol data")
 # -  Doubled Fibonnacci  - #
 ############################
 #=
-=#
 
 # F Symbol Fibonnacci
 index_file = "/home/lukehodgkiss/Documents/FindingTubesJulia/FibData/Luke_Fib_ind.csv"
@@ -75,27 +74,28 @@ F_N = deepcopy(F)
 F_M = deepcopy(F)
 #@show nonzero_values(F)
 
+=#
 
 ###################################
 # -  Rep A4 over Rep A4 Rep A4  - #
 ###################################
-#=
 
 vars = matread("/home/lukehodgkiss/Documents/FindingTubesJulia/RepA4Data/Luke_F.mat")
-F = SparseArray{ComplexF64}(vars["F"])
+F_A4 = SparseArray{ComplexF64}(vars["F"])
 quantum_dims = vec([1.0 1.0 1.0 3.0])
-size_dict = Dict(:module_label => size(F, 1),
-                 :module_label_N => size(F, 1),
-                 :module_label_M => size(F, 1),
-                 :fusion_label => size(F, 2),
-                 :multiplicity_label => size(F)[end],
-                 :multiplicity_label_M => size(F)[end],
-                 :multiplicity_label_N => size(F)[end])
+size_dict = Dict(:module_label => size(F_A4, 1),
+                 :module_label_N => size(F_A4, 1),
+                 :module_label_M => size(F_A4, 1),
+                 :fusion_label => size(F_A4, 2),
+                 :multiplicity_label => size(F_A4)[end],
+                 :multiplicity_label_M => size(F_A4)[end],
+                 :multiplicity_label_N => size(F_A4)[end])
 
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
-F_M = deepcopy(F)
-F_N = deepcopy(F)
+F_M = deepcopy(F_A4)
+F_N = deepcopy(F_A4)
+#=
 
 =#
 
@@ -148,7 +148,6 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 # -  Vec over Vec G  - #
 ########################
 #=
-
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -265,7 +264,8 @@ ProfileView.view()
 # -  Module Associator: ω  - #
 ##############################
 println("Computing ω")
-@time ω = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, quantum_dims, create_left_ijk_basis, F)
+expected_size_ω = length(F_M.data)
+@time ω = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, quantum_dims, quantum_dims, create_left_ijk_basis, expected_size_ω)
 println("Sparsity of ω: $(length(nonzero_keys(ω))/ prod(size(ω)))")
 save_ω(ω)
 
@@ -276,28 +276,6 @@ save_ω(ω)
 @show size(F_N)
 @show size(F_M)
 @show size(ω)
-
-function make_mpo(F)
-    mpo = reindexdims(F,(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))
-    mpo = reshape(mpo,(prod(size(F)[[5,1,2,7]]),prod(size(F)[[4,1,6,10]]),prod(size(F)[[2,3,6,9]]),prod(size(F)[[5,3,4,8]])))
-    return mpo
-end
-
-function make_peps(F)
-    peps = reindexdims(F,(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9))
-    peps = reshape(peps,(prod(size(F)[[1,2,5,7]]),prod(size(F)[[5,3,4,8]]),prod(size(F)[[1,6,4,10]]),prod(size(F)[[2,3,6,9]])))
-    return peps
-end
-
-function pentagon_eqn(F1, F2, F3, F4, F5)
-    
-    @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 -2 -3 1] * make_peps(F2)[-4 -5 1 -6]
-    @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6] * make_mpo(F4)[-1 3 1 -4] * make_mpo(F5)[3 -2 2 -5]
-
-    test = norm(lhs-rhs)
-    @show test
-    return test
-end
 
 mpo = make_mpo(ω)
 peps_M = make_peps(F_M)
@@ -340,9 +318,13 @@ end
 # -  Clebsch Gorndon Coefficients: U  - #
 #########################################
 
-#=
-@time U = sparse_clebsch_gordon_coefficients(ω, quantum_dims)
+@time U = sparse_clebsch_gordon_coefficients(ω, ω, ω, quantum_dims)
 println("Sparsity of U: $(length(nonzero_keys(U))/ prod(size(U)))")
+@show size(U)
+
+#pentagon_eqn(ω, U, U, ω, ω)
+
+#=
 =#
 
 #save_ω(U)

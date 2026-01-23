@@ -20,8 +20,6 @@ using .SparseAlgebraObjects: TubeAlgebra, EigVec, Vec, random_left_linear_combin
 function eigen_decomposition_subalgebra_block(algebra::TubeAlgebra,random_left_linear_combination_ijk::Function, i::Int; rng::AbstractRNG = Random.GLOBAL_RNG)
     LX = random_left_linear_combination_ijk(algebra, i, i, i; rng=rng)
     vals, vecs = eigen(LX.LX)
-    #println(vals)
-    #println(vecs)
 
     #vals, vecs = eigen(Hermitian(LX.LX))
 
@@ -47,7 +45,7 @@ for the block (j, i) by repeatedly applying random left elements `L_X(j, left, r
 Returns Q (columns = orthonormal basis vectors).
 """
 function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_irrep::Int, d_subalgebra_iii::Int, rng::AbstractRNG; 
-    tol_rank::Float64 = 1e-9)
+    tol_rank::Float64 = 1e-8)
     # initial vector produced by applying one random L
     L0 = L_X(algebra, j, v.subalgebra[1], v.subalgebra[2]; rng=rng)
     #@show j, v.subalgebra[1], v.subalgebra[2]
@@ -88,7 +86,7 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
         end
     end
     
-    Q_old[abs.(Q_old) .< 1e-10] .= 0
+    Q_old[abs.(Q_old) .< 1e-13] .= 0
     Q_old = Q_old * Diagonal(exp.(-im .* angle.(Q_old[1, :])))
     #==#
     return Q_old, d_irrep
@@ -101,7 +99,7 @@ remove_overlapping_evec(algebra::TubeAlgebra, ED_ii::Vector{EigVec}, ED::Vector{
 Return ED_ii with eigenvectors removed that have overlap > tol_overlap with any vector in ED.
 """
 function remove_overlapping_evec(algebra::TubeAlgebra, random_left_linear_combination_ijk::Function, random_right_linear_combination_ijk::Function, ED_ii::Vector{EigVec}, ED::Vector{EigVec}; 
-    tol_overlap::Float64 = 1e-11)
+    tol_overlap::Float64 = 1e-14)
     trimmed = Vector{EigVec}()
     for evec in ED_ii
         overlaps = 0.0 + 0im
@@ -138,6 +136,7 @@ Keep only eigenvectors in ED_ii that are pairwise orthogonal under the action of
 """
 function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii; 
     tol_overlap::Float64 = 1e-10)
+   
     kept = Vector{EigVec}()
     for e1 in ED_ii
         overlaps = 0
@@ -184,19 +183,18 @@ d_sum(d_list::Vector{Int}) = sum(x->x, d_list)
 function find_idempotents(algebra::TubeAlgebra)
     irrep_projectors = Vector{Dict{Tuple{Int,Int}, Matrix{ComplexF64}}}()
     ED_global = Vector{EigVec}()
-    rng = MersenneTwister(42)
+    rng = MersenneTwister()#42)
     d_irrep_list = Int[]
 
 
     for ii in 1:algebra.N_diag_blocks
-        
+
         ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
         ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii, ED_global)
 
         RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
         LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
         ED_ii_trimmed = remove_evec_in_same_block_ii(ED_ii_ortho, RX_iii, LX_iii)
-
         append!(ED_global, ED_ii_trimmed)
 
         for vec in ED_ii_trimmed

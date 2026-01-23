@@ -1,6 +1,6 @@
 module FSymbolTools
 
-export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, reindexdims, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G
+export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G, pentagon_eqn, make_mpo, make_peps #, reindexdims
 
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 using LinearAlgebra
@@ -342,9 +342,9 @@ function pentagon_eqn(F1, F2, F3, F4, F5)
     @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6]*make_mpo(F4)[-1 3 1 -4]*make_mpo(F5)[3 -2 2 -5]
 
     test = norm(lhs-rhs)
-    @show test
+    #@show test
     return test
 end
 
-
+# w U = w w U
 end # module

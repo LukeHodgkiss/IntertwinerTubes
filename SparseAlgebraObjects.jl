@@ -245,6 +245,8 @@ function create_left_ijk_basis(t::TubeAlgebra, i,j,k)
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
     f_dense = Array(t.f_ijk_sparse(i,j,k))
     T_a_ijk = [Matrix(transpose(f_dense[a,:,:])) for a in 1:d_a]
+    #T_a_ijk = [Matrix(f_dense[a,:,:]) for a in 1:d_a]
+
 
     ijk_irrep_basis = SubalgebraIrrep(i, j, k, T_a_ijk)
     t.left_cache[key] = ijk_irrep_basis
@@ -260,6 +262,8 @@ function create_right_ijk_basis(t::TubeAlgebra, i,j,k)
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
     f_dense = Array(t.f_ijk_sparse(i,j,k))
     T_b_ijk = [Matrix(f_dense[:,:,c]) for c in 1:d_c]
+    #T_b_ijk = [Matrix(conj(Matrix(f_dense[:,b,:]))) for b in 1:d_b]
+
     ijk_irrep_basis = SubalgebraIrrep(i, j, k, T_b_ijk)
     t.right_cache[key] = ijk_irrep_basis
 
@@ -277,7 +281,7 @@ function random_left_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=t
     x_a = rand(d_a) .+ im .* rand(d_a)
     LX = sum(x_a[i] * block_basis[i] for i in eachindex(x_a))
     if isHermitian && i==j
-        LX += conj!(LX')
+        LX += LX'
         LX=Matrix(LX)/2.0
     end
     SubAlgebraElementBlockL(i, j, k, LX)
@@ -286,9 +290,12 @@ end
 function random_right_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=false, rng=Random.GLOBAL_RNG)
     block_basis = create_right_ijk_basis(t,i,j,k).basis
     d_a, d_b, d_c = t.dim_ijk(i,j,k)
+    x_b = rand(d_b) .+ im .* rand(d_b)
     x_c = rand(d_c) .+ im .* rand(d_c)
 
     RX = Matrix(sum(block_basis[i] * x_c[i] for i in eachindex(x_c)))
+    #RX = Matrix(sum(block_basis[i] * x_b[i] for i in eachindex(x_b)))
+
     
     if isHermitian && i==j
         RX += RX'
