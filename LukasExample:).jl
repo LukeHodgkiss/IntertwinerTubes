@@ -45,7 +45,6 @@ function module_associator(F_M, F_N, d_Y, d_N)
     @show length(idempotents_dict)
     expected_size_ω = length(F_M.data)
     ω_MN = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, d_Y, d_N, create_left_ijk_basis, expected_size_ω)
-
     return ω_MN
 end
 
@@ -94,7 +93,11 @@ quantum_dims = vec(Haagerup_dim_mat_file["dimD"])
 #quantum_dims = Haagerup_dim_mat_file["dimM"]
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
+F_M = F
+F_N = F
 =#
+#=
+
 
 ########################
 # -  Vec over Vec G  - #
@@ -133,10 +136,10 @@ size_dict = Dict(
                  :multiplicity_label_N => size(F_N)[end])
 
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+=#
 
 quantum_dims_N = quantum_dims
 quantum_dims_Y = quantum_dims
-
 @time ω_MN = module_associator(F_M, F_N, quantum_dims_Y, quantum_dims_N)
 
 test = pentagon_eqn(ω_MN, F_N, F_M, ω_MN, ω_MN) 
