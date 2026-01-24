@@ -108,8 +108,16 @@ if test > 1e-9
 end
 =#
 
-#module_associator(F[M], F[N], q_dims[1], q_dims[N])
+#module_associator(F[M], F[N], q_dims[1], q_dims[N])'
+M,N = 1, 5
+println("Modcats: $((M,N))")       
+ω_MN = module_associator(F[M], F[N], q_dims[1], q_dims[N] )
+test = pentagon_eqn(ω_MN, F[N], F[M], ω_MN, ω_MN) 
+if test > 1e-10
+    println("Beep Boop: $(test)")
+end
 
+#=
 
 ω = Matrix{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats)
 for M in 1:n_modcats
@@ -117,17 +125,16 @@ for M in 1:n_modcats
         println("Modcats: $((M,N))")
        
         ω[M,N] = module_associator(F[M], F[N], q_dims[1], q_dims[N] )
-
         test = pentagon_eqn(ω[M,N], F[N], F[M], ω[M,N], ω[M,N]) 
-        if test > 1e-9
+        if test > 1e-10
             println("Beep Boop: $(test)")
-        else
-            println("Boop Beep: $(test)")
         end
-        
-        
     end 
 end
+
+=#
+
+#=
   
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
 M,N,O = 1,1,1
@@ -143,7 +150,6 @@ if test > 1e-9
 else
     println("Boop Beep: $(test)")
 end
-#=
 
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
 for M in 1:n_modcats

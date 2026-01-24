@@ -96,9 +96,57 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 F_M = F
 F_N = F
 =#
+
+
+##########################
+# -  SU_2_8  - #
+##########################
+println("M=N=SU_2_8")
+base_dir = @__DIR__
+index_file = joinpath(base_dir, "SU_2_k/su2_8_ind.csv")
+value_file = joinpath(base_dir, "SU_2_k/su2_8_var.csv")
+size_file = joinpath(base_dir, "SU_2_k/su2_8_size.csv")
+qdim_file = joinpath(base_dir, "SU_2_k/su2_8_dim.csv")
+    
+
+df_index = CSV.read(index_file, DataFrame; header=false)
+df_var = CSV.read(value_file, DataFrame; header=false)
+
+F3_DOK = Dict{CartesianIndex{10}, ComplexF64}()
+
+for i in 1:nrow(df_index)
+    row_idx = df_index[i, :]
+    row_val = df_var[i, :]
+    
+    key = ntuple(j -> Int(row_idx[j]), 10)
+    var = complex(row_val[1], row_val[2])
+
+    F3_DOK[CartesianIndex(key)] = var
+    #F3_DOK[CartesianIndex(key...)] = var
+end
+
+df_size  = CSV.read(size_file, DataFrame; header=false)
+df_qdim  = CSV.read(qdim_file, DataFrame; header=false)
+
+shape = Tuple(Int.(Vector(df_size[1, :])))
+quantum_dims = (Vector(df_qdim[1, :]))
+
+size_dict = Dict(
+    :module_label      => shape[1],
+    :module_label_N    => shape[1],
+    :module_label_M    => shape[1],
+    :fusion_label      => shape[2],
+    :multiplicity_label=> shape[end],
+    :multiplicity_label_M => shape[end],
+    :multiplicity_label_N => shape[end])
+
+
+N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+F = SparseArray{ComplexF64, 10}(F3_DOK, shape)
+F_M = F
+F_N = F
+
 #=
-
-
 ########################
 # -  Vec over Vec G  - #
 ########################
