@@ -130,6 +130,7 @@ function create_f_ijk_sparse(F_M::SparseArray{ComplexF64, 10}, F_N::SparseArray{
         F_N_sliced_doubled = reindexdims(F_N_slice, (1,1,2,2,3,3,4,5,6,7))
         F_M_sliced_doubled = reindexdims(F_M_slice, (1,1,2,2,3,3,4,5,6,7))
         
+        ##@show size(F_M_sliced_doubled), size(F_N_sliced_doubled)
         @tensor dxdxpdy_F_M_dot_F_N[y,p,x,r,s,n,a,m,b] := F_N_sliced_doubled[y_, y__, p_, p__,x_, x__, r,s,l,n ] * conj(F_M_sliced_doubled[y, y_,p, p_, x, x_,a,m,l,b ]) * dY1[y__] * dY2[p__] * dY3[x__]
         dropnearzeros!(dxdxpdy_F_M_dot_F_N; tol = 1e-10)
         
@@ -302,7 +303,7 @@ function module_associator(F_M, F_N, d_Y, d_N)
     dimension_dict = create_dim_dict(size_dict, tubes_map, tube_map_shape, N_M, N_N)
     tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
     idempotents_dict = find_idempotents(tubealgebra)
-    @show length(idempotents_dict)
+    #@show length(idempotents_dict)
     expected_size_ω = length(F_M.data)
     ω_MN = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, d_Y, d_N, create_left_ijk_basis, expected_size_ω)
 
