@@ -37,7 +37,6 @@ function create_fusion_rules(F)
 
     F = reindexdims(hom_space, (3,4,2,6)) #M1, M2, Y: k
     
-
     @inbounds for indx in (nonzero_keys(F))
     #@inbounds for indx in (sort([Tuple(key) for key in nonzero_keys(F)]))
 

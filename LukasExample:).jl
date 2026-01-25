@@ -10,7 +10,6 @@ using StaticArrays: SVector
 using Profile
 using ProfileView
 
-
 # Importing Locally
 include("SparseAlgebraObjects.jl")
 using .SparseAlgebraObjects: TubeAlgebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, create_left_ijk_basis, create_right_ijk_basis
@@ -41,11 +40,13 @@ function module_associator(F_M, F_N, d_Y, d_N)
    
     dimension_dict = create_dim_dict(size_dict, tubes_map, tube_map_shape, N_M, N_N)
     tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
-    idempotents_dict = find_idempotents(tubealgebra)
+    println(" Finding Idempotents ")
+    @time idempotents_dict = find_idempotents(tubealgebra)
     @show length(idempotents_dict)
 
     expected_size_ω = length(F_M.data)
-    ω_MN = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, d_Y, d_N, create_left_ijk_basis, expected_size_ω)
+    println(" Constructing ω_MN ")
+    @time ω_MN = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, d_Y, d_N, create_left_ijk_basis, expected_size_ω)
     return ω_MN
 end
 
@@ -56,6 +57,7 @@ println("Reading in F symbol data")
 # -  Doubled Haagerup  - #
 ##########################
 #=
+
 println("M=N=Doubled Haagerup")
 base_dir = @__DIR__
 index_file = joinpath(base_dir, "Haagerup data/Luke_Haagerup_ind.csv")
@@ -96,8 +98,8 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 F_M = F
 F_N = F
-=#
 
+=#
 
 ##########################
 # -  SU_2_8  - #
@@ -147,6 +149,9 @@ F = SparseArray{ComplexF64, 10}(F3_DOK, shape)
 
 F_M = F
 F_N = F
+#=
+
+=#
 
 #=
 ########################
@@ -190,16 +195,11 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
 quantum_dims_N = quantum_dims
 quantum_dims_Y = quantum_dims
-
-@show quantum_dims
-@show size(F_M)
 @time ω_MN = module_associator(F_M, F_N, quantum_dims_Y, quantum_dims_N)
 
-#=
 test = pentagon_eqn(ω_MN, F_N, F_M, ω_MN, ω_MN) 
 if test > 1e-9
     println("Beep Boop: $(test)")
 else
     println("Boop Beep: $(test)")
 end
-=#
