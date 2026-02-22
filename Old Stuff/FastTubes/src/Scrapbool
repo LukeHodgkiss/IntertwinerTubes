@@ -34,3 +34,29 @@ peps = reshape(peps,(128,128,128,128))
 #@show norm(lhs-rhs)
 
 println(tubealgebra.d_algebra_squared)
+
+
+@tensor trace_P_abc[] := ( 
+                reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,4,4,4,5,5,6,7,8,9))[M1, M1_, Y__,Y_, N1, N2_, N1, N1_, N2__, M1, M2_, i_a, k_a, l_a, i_a] * 
+                reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, O1__, Y_, Y, M2_, M1_, O1, O2_, i_b, l_a, l_b, i_b] *
+                conj(ω_NO[c,:,:,:,:,:,:,:,:,:][N1_, Y, O2_, O1_, N2_, i_c, k_a, l_b, i_c]) * 
+                SparseArray(q_dims[1])[Y__] *
+                SparseArray(d_N.^-1)[N2__] * 
+                SparseArray(d_O.^-1)[O1__]   
+                )
+@show trace_P_abc = trace_P_abc * d_X[c] * FP_dim_D / FP_dim_C
+
+N_eigs = round(Int, abs(trace_P_abc[]))
+
+@tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
+                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,3,4,4,5,5,6,7,8,9))[M1, M1_, Y__, Y_, N2, N2_, N2__, N1, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
+                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, O1__, Y_, Y, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
+                    #conj(ω_NO[c,:,:,:,:,:,:,:,:,:][O1_, Y, N2_, N1_, O2_, i_c, k_a, l_b,  j_c]) *
+                    conj(ω_NO[c,:,:,:,:,:,:,:,:,:][N1_, Y, O2_, O1_, N2_, i_c, k_a, l_b,j_c]) *
+                    SparseArray(q_dims[1])[Y__] * 
+                    SparseArray(d_N.^-1)[N2__] * 
+                    SparseArray(d_O.^-1)[O1__]
+                )
+P_abc = P_abc * d_X[c] #* FP_dim_D / FP_dim_C
+
+

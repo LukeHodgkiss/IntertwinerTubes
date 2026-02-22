@@ -79,6 +79,7 @@ F_M = deepcopy(F)
 ###################################
 # -  Rep A4 over Rep A4 Rep A4  - #
 ###################################
+#=
 
 vars = matread("/home/lukehodgkiss/Documents/FindingTubesJulia/RepA4Data/Luke_F.mat")
 F_A4 = SparseArray{ComplexF64}(vars["F"])
@@ -95,7 +96,6 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 
 F_M = deepcopy(F_A4)
 F_N = deepcopy(F_A4)
-#=
 
 =#
 
@@ -141,13 +141,12 @@ quantum_dims = vec(Haagerup_dim_mat_file["dimD"])
 #quantum_dims = Haagerup_dim_mat_file["dimM"]
 N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
-
 =#
 
 ########################
 # -  Vec over Vec G  - #
 ########################
-#=
+
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -161,7 +160,7 @@ cayley_table_S3 = [ 1 2 3 4 5 6;
 F_M = F_mod_cat_Vec_Vec_G(cayley_table_S3)
 quantum_dims = vec(ones(size(cayley_table_S3, 1)))
 F = F_M
-#F_N = F_M
+F_N = F_M
 
 size_dict = Dict(:module_label => size(F, 1),
                  :module_label_N => size(F, 1),
@@ -177,6 +176,8 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 ########################## 
 # -  Vec_G over Vec_G  - #
 ########################## 
+
+#=
 cayley_table_S3 = [ 1 2 3 4 5 6;
                     2 1 4 3 6 5;
                     3 5 1 6 2 4;
@@ -188,8 +189,8 @@ cayley_table_S3 = [ 1 2 3 4 5 6;
 
 F_N = F_mod_cat_Vec_G_Vec_G(cayley_table_S3)
 quantum_dims = vec(ones(size(cayley_table_S3, 1)))
-#F = deepcopy(F_N)
-#F_M = deepcopy(F_N)
+F = deepcopy(F_N)
+F_M = deepcopy(F_N)
 size_dict = Dict(
                  :module_label_N => size(F_N, 1),
                  :module_label_M => size(F_M, 1),
@@ -201,10 +202,11 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 =#
 
 
+
 println("Finished reading in F symbol data")
 
-println("Sparsity of F_N: $(length(nonzero_keys(F_N))/ prod(size(F_N)))")
-println("Sparsity of F_M: $(length(nonzero_keys(F_M))/ prod(size(F_M)))")
+println("Sparsity of F_N: $(length(nonzero_keys(F_N))/prod(size(F_N)))")
+println("Sparsity of F_M: $(length(nonzero_keys(F_M))/prod(size(F_M)))")
 
 
 @show size(F_M)
@@ -248,7 +250,6 @@ dim_calc(idempotents_dict)
 #####################
 # -  Idempotents  - #
 #####################
-
 #=
 Profile.clear()
 #Profile.init(n = 10^7, delay = 0.001)
@@ -265,6 +266,7 @@ ProfileView.view()
 ##############################
 println("Computing ω")
 expected_size_ω = length(F_M.data)
+@show quantum_dims
 @time ω = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, quantum_dims, quantum_dims, create_left_ijk_basis, expected_size_ω)
 println("Sparsity of ω: $(length(nonzero_keys(ω))/ prod(size(ω)))")
 save_ω(ω)
@@ -275,7 +277,7 @@ save_ω(ω)
 
 @show size(F_N)
 @show size(F_M)
-@show size(ω)
+@show size(ω[1,:,:,:,:,:,:,:,:,:])
 
 mpo = make_mpo(ω)
 peps_M = make_peps(F_M)
@@ -286,6 +288,7 @@ peps_N = make_peps(F_N)
 @show size(peps_N)
 
 pentagon_eqn(ω, F_N, F_M, ω, ω)
+
 
 #pentagon_eqn(F_N, F_N, F_N, F_N, F_N)
 #pentagon_eqn(ω, ω, ω, ω, ω)
@@ -302,8 +305,6 @@ F_doubled1 = reindexdims(F, (1,1, 2,2, 3,3, 4,4, 5, 6,6, 7,8,9,10))
 F_doubled2 = reindexdims(F, (1,2,3,3,4,5,6,6,7,8,9,10))
 @tensor rhs[a, b, c, d, e, f, g, h, i, k, l, m, n, o, p] := F_doubled1[k, k_, l, l_, b, b_, e, e_, a, q, q_, n, g, r, s] * F_doubled2[k_, q, c, c_, d, e_, m, m_, s, h, t, p] * ω[l_, b_, c_, m_, q_, f, r, t, i, o]
 @show norm(lhs-rhs)
-
-
 =#
 #=
 Profile.clear()
@@ -318,11 +319,47 @@ end
 # -  Clebsch Gorndon Coefficients: U  - #
 #########################################
 
-@time U = sparse_clebsch_gordon_coefficients(ω, ω, ω, quantum_dims)
-println("Sparsity of U: $(length(nonzero_keys(U))/ prod(size(U)))")
-@show size(U)
 
-#pentagon_eqn(ω, U, U, ω, ω)
+N_X, N_X_sparsetensor = create_fusion_rules(ω)
+
+@show size(N_X_sparsetensor)
+@show size(N_M_sparsetensor)
+
+d_X = compute_q_dims(N_X_sparsetensor)
+@show d_X
+
+
+d_M = compute_q_dims(N_M_sparsetensor)
+@show d_M
+
+@time U = sparse_clebsch_gordon_coefficients(ω, ω, ω, quantum_dims, quantum_dims, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
+# println("Sparsity of U: $(length(nonzero_keys(U))/ prod(size(U)))")
+@show size(U)
+save_ω(U)
+
+@show size(make_peps(U))
+@show size(make_mpo(U))
+@show size(make_peps(ω))
+@show size(make_mpo(ω))
+
+pentagon_eqn(ω, U, U, ω, ω)
+# pentagon_eqn(ω, U, ω, U, ω)
+# pentagon_eqn(ω, U, ω, ω, U)
+# pentagon_eqn(U, ω, U, ω, ω)
+# pentagon_eqn(U, ω, ω, U, ω)
+# pentagon_eqn(U, ω,  ω, ω, U)
+
+F1, F2, F3, F4, F5 = ω, U, U, ω, ω
+
+# MPO # up down left righ
+# PEPS # OutOfPage Up Left Right
+
+
+# @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 1 -2 -3 ]* make_peps(F2)[-4 1  -5  -6]
+# @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[-4 -1 1 2 ]*make_mpo(F4)[1 -5 -2 3]*make_mpo(F5)[2 -6 3 -3]
+
+test = norm(lhs-rhs)
+@show test
 
 #=
 =#

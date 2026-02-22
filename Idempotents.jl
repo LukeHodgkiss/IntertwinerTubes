@@ -18,10 +18,11 @@ using .SparseAlgebraObjects: TubeAlgebra, EigVec, Vec, random_left_linear_combin
     eigen_decomposition_subalgebra_block(algebra::TubeAlgebra, i::Int; rng=GLOBAL_RNG)
 """
 function eigen_decomposition_subalgebra_block(algebra::TubeAlgebra,random_left_linear_combination_ijk::Function, i::Int; rng::AbstractRNG = Random.GLOBAL_RNG)
-    LX = random_left_linear_combination_ijk(algebra, i, i, i; rng=rng)
+    LX = random_left_linear_combination_ijk(algebra, i, i, i; rng=rng, isHermitian=true)
     vals, vecs = eigen(LX.LX)
-
-    #vals, vecs = eigen(Hermitian(LX.LX))
+    #@show vals
+    #@show norm(LX.LX)
+    vals, vecs = eigen(Hermitian(LX.LX))
 
     results = Vector{EigVec}(undef, length(vals))
     ##@show vals, vecs
@@ -68,7 +69,7 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
         qr_decomp = qr(M_new)
         Rnew = qr_decomp.R
         rank_new = count(abs.(diag(Rnew)) .> tol_rank)
-
+        ##@show diag(Rnew)
         
         if rank_new > rank_old
             push!(Vcols, new_v)
@@ -92,7 +93,7 @@ function build_block(v::EigVec, algebra::TubeAlgebra, L_X::Function, j::Int, d_i
     return Q_old, d_irrep
 end
 
-# ---------- remove_overlapping_evec ----------
+# ---------- remove_overlapping_evec from diff blocks ----------
 """
 remove_overlapping_evec(algebra::TubeAlgebra, ED_ii::Vector{EigVec}, ED::Vector{EigVec}; tol_overlap=1e-9)
 
@@ -100,25 +101,62 @@ Return ED_ii with eigenvectors removed that have overlap > tol_overlap with any 
 """
 function remove_overlapping_evec(algebra::TubeAlgebra, random_left_linear_combination_ijk::Function, random_right_linear_combination_ijk::Function, ED_ii::Vector{EigVec}, ED::Vector{EigVec}; 
     tol_overlap::Float64 = 1e-12)
+    #println("Remove between block")
     trimmed = Vector{EigVec}()
     for evec in ED_ii
+        #println("new evec")
+
         overlaps = 0.0 + 0im
-        s, t = evec.subalgebra
+        #s, t = evec.subalgebra
+        #t, s = evec.subalgebra
+        ip, jp = evec.subalgebra
+
         for old_evec in ED
             i, j = old_evec.subalgebra
-            if algebra.dim_ijk(j,t,s) !== nothing && algebra.dim_ijk(s,i,j) !== nothing
+            #j, i = old_evec.subalgebra
+            #i, j = old_evec.subalgebra
+            
+            #if algebra.dim_ijk(j,t,s) !== nothing && algebra.dim_ijk(s,i,j) !== nothing
+            #if algebra.dim_ijk(t, j, s) !== nothing && algebra.dim_ijk(s,i,j) !== nothing
+            #if algebra.dim_ijk(s, j, t) !== nothing && algebra.dim_ijk(s,i,j) !== nothing
             #if haskey(algebra.dimension_dict, (j, t, s)) && haskey(algebra.dimension_dict, (s, i, j))
-                LX_sij = random_left_linear_combination_ijk(algebra, s, i, j)
-                RX_jts = random_right_linear_combination_ijk(algebra, j, t, s)
-                overlaps += abs(inner_product(RX_jts * evec, LX_sij * old_evec))
-               
-            else
+            #if algebra.dim_ijk(t, j, s) !== nothing && algebra.dim_ijk(s,i,j) !== nothing
+            if algebra.dim_ijk(ip,i,j) !== nothing && algebra.dim_ijk(j,jp, ip) !== nothing
+            
+                ##@show (j,t,s), (s,i,j)
+                ##@show algebra.dim_ijk(j,t,s), size(evec.vector)
+                ##@show algebra.dim_ijk(s,i,t), old_evec.vector
+                LX_sij = random_left_linear_combination_ijk(algebra, ip,i,j)
+                RX_jts = random_right_linear_combination_ijk(algebra, j,jp, ip) #j,jp,j#jp, j, ip
+                #RX_jts = random_right_linear_combination_ijk(algebra, s, j, t)
+                #overlaps += abs(inner_product(RX_jts * evec, LX_sij * old_evec))
+                #overlaps += abs(inner_product(evec, RX_jts * (LX_sij * old_evec)))
+
+                v1 =  RX_jts * evec
+                #@show size(v1.vector)
+                #@show RX_jts.subalgebra, LX_sij.subalgebra, old_evec.subalgebra
+                #@show evec.irrep_index, RX_jts.irrep, LX_sij.irrep, old_evec.irrep_index
+                #@show size(RX_jts.LX), size(LX_sij.LX), size(old_evec.vector)
+
+                v2 =(LX_sij * old_evec)
+
+                #@show v1.subalgebra, v2.subalgebra
+                #@show v1.irrep_index, v2.irrep_index
+
+                overlaps += abs(dot(v1.vector, v2.vector))
+ 
+                #overlaps += abs(dot(evec.vector, old_evec.vector))
+
+                #@show overlaps
+            #else
                 #overlaps += 0.0
             end
-
+            
             if abs(overlaps) > tol_overlap
+                overlaps = 1.0
                 break
             end
+            #==#
         end
 
         if abs(overlaps) < tol_overlap
@@ -135,16 +173,31 @@ end
 
 Keep only eigenvectors in ED_ii that are pairwise orthogonal under the action of RX_iii and LX_iii.
 """
-function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii; 
-    tol_overlap::Float64 = 1e-9)
-   
 
+function remove_evec_in_same_block_ii(ED_ii::Vector{EigVec}, RX_iii, LX_iii; 
+                                      tol_overlap::Float64 = 1e-9)
     kept = Vector{EigVec}()
+    isempty(ED_ii) && return kept
+
+    R1 = RX_iii.LX
+    L2 = LX_iii.LX
+
+    #println("Remove same block")
+    vecs = [(evec.vector) for evec in ED_ii]
+    ##@show vecs, ED_ii
+
+    V = transpose(reduce(vcat, permutedims.(vecs)))
+    #@show norm(diagm(diag(V'* R1 * V)) - V'* R1 * V)#<1e-10
+    #@show norm(diagm(diag(V'* L2 * V)) - V'* L2 * V)#<1e-10
+
     for e1 in ED_ii
+        #println("new e1")
+
         overlaps = 0
         for e2 in kept
             overlaps += abs(inner_product(RX_iii * e1, LX_iii * e2))
-            #@show inner_product(RX_iii * e1, LX_iii * e2)
+            ##@show e1.vector, e2.vector
+            ##@show inner_product(RX_iii * e1, LX_iii * e2)
             if overlaps>tol_overlap
                 break
             end
@@ -204,16 +257,37 @@ function find_idempotents(algebra::TubeAlgebra)
         ED_ii_trimmed = remove_evec_in_same_block_ii(ED_ii_ortho, RX_iii, LX_iii)
         #@show length(ED_ii_trimmed)
         append!(ED_global, ED_ii_trimmed)
-        #push!(trimmed, evec)
+        #@show length(ED_global)
 
+        #=
+        ED_ii = eigen_decomposition_subalgebra_block(algebra, random_left_linear_combination_ijk, ii; rng=rng)
+        #@show length(ED_ii)
+        
+
+        RX_iii = random_right_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
+        LX_iii = random_left_linear_combination_ijk(algebra, ii, ii, ii; isHermitian=false, rng=rng)
+        ED_ii_trimmed = remove_evec_in_same_block_ii(ED_ii, RX_iii, LX_iii)
+        #@show length(ED_ii_trimmed)
+        
+
+        ED_ii_ortho = remove_overlapping_evec(algebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, ED_ii_trimmed, ED_global)
+        #@show length(ED_ii_ortho)
+        append!(ED_global, ED_ii_ortho)
+        #@show length(ED_global)
+        #push!(trimmed, evec)
+        =#
         for vec in ED_ii_trimmed
+        #for vec in ED_ii_ortho
+
             irrep, d_irrep = build_out_irrep(vec, ii, algebra, random_left_linear_combination_ijk, rng)
             if length(irrep) > 0 # this shuldnt be neccesary
                 push!(irrep_projectors, irrep)
                 d_irrep = sum(size(Q)[2]^2 for Q in values(irrep))
                 push!(d_irrep_list, d_irrep)
             end
-               
+            
+            continue
+
             #=
             if d_sum(d_irrep_list) >= algebra.d_algebra_squared
                 print("We saved time? :)")
@@ -222,7 +296,7 @@ function find_idempotents(algebra::TubeAlgebra)
             =#
         end
     end
-    ##@show sum(d_irrep_list)
+    #@show sum(d_irrep_list)
     return irrep_projectors
 end
 
@@ -238,7 +312,7 @@ function dim_calc(idempotents_dict)
             #println(proj)
         end 
     end
-    ##@show dim_alg_glob
+    #@show dim_alg_glob
 end
 
 end # Module

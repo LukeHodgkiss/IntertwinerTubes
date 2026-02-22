@@ -1,11 +1,13 @@
 module FSymbolTools
 
-export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G, pentagon_eqn, make_mpo, make_peps #, reindexdims
+export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G, pentagon_eqn, make_mpo, make_peps,make_fusion, compute_q_dims, make_cols_real #, reindexdims
 
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 using LinearAlgebra
 using TensorOperations
 using TupleTools
+using Arpack
+using StaticArrays: SVector, @SVector
 
 
 """
@@ -325,26 +327,66 @@ function F_mod_cat_Vec_G_Vec_G(cayley_table)
 end
 
 function make_mpo(F)
-    mpo = reindexdims(F,(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))
+    mpo = reindexdims(F,(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))# left right down up
     mpo = reshape(mpo,(prod(size(F)[[5,1,2,7]]),prod(size(F)[[4,1,6,10]]),prod(size(F)[[2,3,6,9]]),prod(size(F)[[5,3,4,8]])))
     return mpo
 end
 
 function make_peps(F)
-    peps = reindexdims(F,(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9))
+    peps = reindexdims(F,(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # Left Right Down OutOfPage  
     peps = reshape(peps,(prod(size(F)[[1,2,5,7]]),prod(size(F)[[5,3,4,8]]),prod(size(F)[[1,6,4,10]]),prod(size(F)[[2,3,6,9]])))
+    return peps
+end
+
+function make_fusion(F)
+    peps = reindexdims(F,(4,1,6,10, 6,2,3,9, 4,5,3,8, 1,2,5,7)) #  Up Left Right OutOfPage
+    peps = reshape(peps,(prod(size(F)[[4,1,6,10]]),prod(size(F)[[6,2,3,9]]),prod(size(F)[[4,5,3,8]]),prod(size(F)[[1,2,5,7]])))
     return peps
 end
 
 function pentagon_eqn(F1, F2, F3, F4, F5)
     
+
     @tensor lhs[-1 -2 -3 -4 -5 -6] := make_mpo(F1)[-1 -2 -3 1]* make_peps(F2)[-4 -5 1 -6]
     @tensor rhs[-1 -2 -3 -4 -5 -6] := make_peps(F3)[1 2 -3 -6]*make_mpo(F4)[-1 3 1 -4]*make_mpo(F5)[3 -2 2 -5]
 
     test = norm(lhs-rhs)
-    #@show test
+    @show test
     return test
 end
 
+function compute_q_dims(N)
+    
+    #M1, M2, Y: k
+    d_Y = Vector{Float64}()
+    
+    for M2 in 1:size(N,2) 
+    #for M1 in 1:size(N,1) 
+
+        #evals, evecs  = eigen(Array(N[:,:,Y]))
+        #push!(d_Y, abs(evals[1])) 
+        Σ = svdvals(Array(N[:,M2,:]))
+        #Σ = svdvals(Array(N[M1,:,:]))
+
+        push!(d_Y, abs(Σ[1])) 
+
+    end 
+    
+    return d_Y
+end
+
 # w U = w w U
+
+
+function make_cols_real(M)
+    m, n = size(M)
+    for j in 1:n
+        col = M[:,j]
+        indx_max = argmax(abs.(col))
+        phase = col[indx_max] / abs(col[indx_max])
+        M[:, j] = col / phase
+    end
+    return M
+end
+
 end # module

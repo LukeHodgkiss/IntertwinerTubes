@@ -1,5 +1,6 @@
 module SparseAlgebraObjects
 using LinearAlgebra, Random
+using TensorOperations
 using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
 
 export Vec, EigVec, AlgebraVec, inner_product, TubeAlgebra, random_left_linear_combination_ijk, random_right_linear_combination_ijk, create_left_ijk_basis, create_right_ijk_basis
@@ -62,9 +63,9 @@ end
 
 #  Vec – Vec
 function inner_product(v1::Vec, v2::Vec)
-    if v1.subalgebra == v2.subalgebra
-        return dot(conj.(v2.vector), v1.vector)
-        
+    if v1.subalgebra == v2.subalgebra && v1.irrep_index == v2.irrep_index
+        return dot(v2.vector, v1.vector)
+
     else
         return 0.0 + 0im
     end
@@ -103,7 +104,7 @@ abstract type AbstractSubalgebraIrrep end
 
 mutable struct SubalgebraIrrep <: AbstractSubalgebraIrrep
     subalgebra::Tuple{Int,Int}          # (i,j)
-    irrep::Int                           # k
+    irrep::Int                          # k
     basis::Vector{Matrix{ComplexF64}}   # T_aijk_list
     d_a::Int
     irrep_space_shape::Tuple{Int,Int}   # shape of each basis matrix
@@ -193,14 +194,32 @@ end
 
 # R-action on Vec
 function Base.:*(block::SubAlgebraElementBlockR, v::AbstractVec)
-    if block.subalgebra[2] != v.subalgebra[2]
+    #if block.subalgebra[2] != v.subalgebra[2]
+    if block.subalgebra[1] != v.subalgebra[2]
         println("Cannot act: R_($(block.subalgebra)) on Vec in subalgebra $(v.subalgebra)")
         return VecZero(size(block.LX,2), block.irrep, (v.subalgebra[1], block.subalgebra[1]))
     end
-    
-    Vec(  block.LX * v.vector, (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
-end
+    #expected_dim = (v.subalgebra[1], block.subalgebra[1], v.irrep_index)
+    #@show size(v.vector), size(block.LX)
+    #@show block.subalgebra, block.irrep,v.subalgebra, v.irrep_index,(v.subalgebra[1], block.subalgebra[1], v.irrep_index)
 
+    #Vec( block.LX * v.vector , (v.subalgebra[1], block.subalgebra[2]), v.irrep_index)
+    #Vec( block.LX * v.vector , (v.subalgebra[1], block.subalgebra[2]), v.irrep_index)
+    #Vec(transpose(v.vector )* block.LX , (v.subalgebra[1], block.subalgebra[2]), v.subalgebra[1])
+    
+    Vec( block.LX * v.vector , (v.subalgebra[1], block.subalgebra[2]), v.subalgebra[1])
+
+    
+    #Vec( block.LX * reshape(v.vector, 1, :) , (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
+    
+    
+    #Vec(vec(Matrix(reshape(v.vector, :, 1)) * Matrix(block.LX) ), (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
+    #Vec(vec(Matrix(transpose(reshape(v.vector, :, 1))) * Matrix(block.LX) ), (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
+    #Vec(vec(reshape(v.vector, 1,:) * Matrix(block.LX) ), (block.subalgebra[1], v.subalgebra[2]), v.irrep_index)
+    #Vec(  transpose(transpose(v.vector) * block.LX) , (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
+    #Vec(  block.LX * v.vector', (v.subalgebra[1], block.subalgebra[1]), v.irrep_index)
+
+end
 
 # -------------------------------
 # TubeAlgebra 
@@ -209,7 +228,6 @@ end
 function linear_combination(irrep::SubalgebraIrrep, coeffs::Vector)
     sum(coeffs[i] * irrep.basis[i] for i in 1:length(coeffs))
 end
-
 
 mutable struct TubeAlgebra
     #dimension_dict::Dict{Tuple{Int,Int,Int}, Tuple{Int,Int,Int}}
@@ -238,6 +256,11 @@ end
 # -------------------------------
 
 function create_left_ijk_basis(t::TubeAlgebra, i,j,k)
+    # if t.dim_ijk(i,j,k) !== nothing
+    #     continue
+    # else 
+    #     return
+    # end
     key = (i,j,k)
     if haskey(t.left_cache, key)
         return t.left_cache[key]
@@ -247,21 +270,35 @@ function create_left_ijk_basis(t::TubeAlgebra, i,j,k)
     T_a_ijk = [Matrix(transpose(f_dense[a,:,:])) for a in 1:d_a]
     #T_a_ijk = [Matrix(f_dense[a,:,:]) for a in 1:d_a]
 
-
     ijk_irrep_basis = SubalgebraIrrep(i, j, k, T_a_ijk)
     t.left_cache[key] = ijk_irrep_basis
     return ijk_irrep_basis
 end
 
-function create_right_ijk_basis(t::TubeAlgebra, i,j,k)
+#function create_right_ijk_basis(t::TubeAlgebra, i,j,k)
+#function create_right_ijk_basis(t::TubeAlgebra, k,i,j)
+#function create_right_ijk_basis(t::TubeAlgebra, i,j,k)
+function create_right_ijk_basis(t::TubeAlgebra, i, j,k)
+
+#function create_right_ijk_basis(t::TubeAlgebra, )
+
     key = (i,j,k)
     if haskey(t.right_cache, key)
         return t.right_cache[key]
     end
 
-    d_a, d_b, d_c = t.dim_ijk(i,j,k)
-    f_dense = Array(t.f_ijk_sparse(i,j,k))
-    T_b_ijk = [Matrix(f_dense[:,:,c]) for c in 1:d_c]
+    #d_a, d_b, d_c = t.dim_ijk(i,j,k)
+    d_a, d_b, d_c = t.dim_ijk(k,i,j)
+
+    #f_dense = Array(t.f_ijk_sparse(i,j,k))
+    f_dense = Array(t.f_ijk_sparse(k,i,j))
+
+    #T_b_ijk = [Matrix(f_dense[:,:,c]) for c in 1:d_c]
+    T_b_ijk = [Matrix(transpose(f_dense[:,b,:])) for b in 1:d_b]
+    #T_b_ijk = [Matrix(f_dense[:,b,:]) for b in 1:d_b]
+
+    #T_b_ijk = [Matrix(conj(f_dense[:,b,:])) for b in 1:d_b]
+    #T_b_ijk = [Matrix(conj(f_dense[:,:,c])) for c in 1:d_c]
     #T_b_ijk = [Matrix(conj(Matrix(f_dense[:,b,:]))) for b in 1:d_b]
 
     ijk_irrep_basis = SubalgebraIrrep(i, j, k, T_b_ijk)
@@ -287,21 +324,36 @@ function random_left_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=t
     SubAlgebraElementBlockL(i, j, k, LX)
 end
 
-function random_right_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=false, rng=Random.GLOBAL_RNG)
+#function random_right_linear_combination_ijk(t::TubeAlgebra, i,j,k; isHermitian=false, rng=Random.GLOBAL_RNG)
+function random_right_linear_combination_ijk(t::TubeAlgebra, j,k,i; isHermitian=false, rng=Random.GLOBAL_RNG)
+    
     block_basis = create_right_ijk_basis(t,i,j,k).basis
-    d_a, d_b, d_c = t.dim_ijk(i,j,k)
-    x_b = rand(d_b) .+ im .* rand(d_b)
-    x_c = rand(d_c) .+ im .* rand(d_c)
-
-    RX = Matrix(sum(block_basis[i] * x_c[i] for i in eachindex(x_c)))
-    #RX = Matrix(sum(block_basis[i] * x_b[i] for i in eachindex(x_b)))
+    #block_basis = create_right_ijk_basis(t,j,k, i).basis
 
     
-    if isHermitian && i==j
+
+    d_a, d_b, d_c = t.dim_ijk(k, i,j)
+    #d_a, d_b, d_c = t.dim_ijk(k,i,j)
+    #d_b = length(block_basis)
+    x_b = Array(rand(d_b) .+ im .* rand(d_b))
+    #x_c = rand(d_c) .+ im .* rand(d_c)
+
+    #T_b_ijk = [Matrix(transpose(Array(t.f_ijk_sparse(i,j,k))[:,b,:])) for b in 1:d_b]
+    #@tensor RX[c, a]:= Array(t.f_ijk_sparse(i,j,k))[a,b,c] * x_b[b]
+
+    #RX = Matrix(Array(RX))
+    #RX = Matrix(sum(block_basis[i] * x_c[i] for i in eachindex(x_c)))
+    RX = Matrix(sum(block_basis[b] * x_b[b] for b in eachindex(x_b)))
+    
+    #@assert rank(RX) == d_b
+
+    if isHermitian && k==j
         RX += RX'
         RX = Matrix(RX)
     end
     SubAlgebraElementBlockR(i, j, k, RX)
+    #SubAlgebraElementBlockR(j, k, i, RX)
+
 end
 
 end # Module

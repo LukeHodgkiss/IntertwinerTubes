@@ -8,7 +8,7 @@ using CSV, DataFrames
 using StaticArrays: SVector
 using Profile
 using ProfileView
-
+using Arpack # For eigenvalue solver in constructing CG from P_abc
 
 # Importing Locally
 include("SparseAlgebraObjects.jl")
@@ -83,41 +83,60 @@ function module_associator(F_M, F_N, d_Y, d_N)
                      :multiplicity_label_N => size(F_N)[end])
 
     N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
+    #println("N_diag_blocks=$N_diag_blocks")
 
     N_M, N_M_sparsetensor = create_fusion_rules(F_M)
     N_N, N_N_sparsetensor = create_fusion_rules(F_N)
+    #@show N_M
+    #@show N_N
     tubes_map, tube_map_shape, tube_map_inv = create_tube_map(N_M, N_N, size_dict)
+    #@show length(tubes_map)
     f_ijk_sparse = create_f_ijk_sparse(F_M, F_N, d_Y, size_dict, tubes_map, tube_map_shape, N_M, N_N)
-   
     dimension_dict = create_dim_dict(size_dict, tubes_map, tube_map_shape, N_M, N_N)
     tubealgebra = TubeAlgebra(N_diag_blocks, d_algebra, dimension_dict, f_ijk_sparse)
+
+    #save_f_ijk(tubealgebra)
+    #save_dim_dict(dimension_dict)
+
+    # L1 = random_left_linear_combination_ijk(tubealgebra, N_diag_blocks,N_diag_blocks,N_diag_blocks).LX
+    # L2 = random_left_linear_combination_ijk(tubealgebra, N_diag_blocks,N_diag_blocks,N_diag_blocks).LX
+    # R1 = random_right_linear_combination_ijk(tubealgebra, N_diag_blocks,N_diag_blocks,N_diag_blocks).LX
+
+    # #@show norm(L1 * R1 - R1 *L1)
+    # #@show norm(L1 * R1' - R1' *L1)
+
+    # vals, vecs = eigen(Hermitian(L1))
+
+    # #norm(diagm(diag(vecs'* R1 * vecs)) - vecs'* R1 * vecs)
+    # #@show norm(diagm(diag(vecs'* L2 * vecs)) - vecs'* L2 * vecs)
+
+
+    # control shift 7
     idempotents_dict = find_idempotents(tubealgebra)
-    @show length(idempotents_dict)
+    #dim_calc(idempotents_dict)
+    # @show length(idempotents_dict)
+    # for i in 1:N_diag_blocks
+    #     @show is_associative(f_ijk_sparse(i,i,i))
+    # end
     expected_size_ω = length(F_M.data)
     ω_MN = construct_irreps(tubealgebra, idempotents_dict, size_dict, tube_map_inv, d_Y, d_N, create_left_ijk_basis, expected_size_ω)
-
     return ω_MN
 end
 
 
 #=
-test = pentagon_eqn(ω_MN, F[N], F[M],ω_MN, ω_MN) # Maybe thery ar epermed so need nm and mn?
-println("Beep Boop: $(test)")
-if test > 1e-9
-    println("Beep Boop: $(test)")
-end
-=#
 
-#module_associator(F[M], F[N], q_dims[1], q_dims[N])'
-M,N = 1, 5
+M,N = 5, 1
 println("Modcats: $((M,N))")       
 ω_MN = module_associator(F[M], F[N], q_dims[1], q_dims[N] )
+@show size(ω_MN)
 test = pentagon_eqn(ω_MN, F[N], F[M], ω_MN, ω_MN) 
 if test > 1e-10
     println("Beep Boop: $(test)")
 end
 
-#=
+=#
+
 
 ω = Matrix{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats)
 for M in 1:n_modcats
@@ -131,25 +150,132 @@ for M in 1:n_modcats
         end
     end 
 end
+#=
 
 =#
 
-#=
   
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
-M,N,O = 1,1,1
+M,N,O = 2,5,2
 println("Modcats: $((M,N,O))")
-@time U[M,N,O] = sparse_clebsch_gordon_coefficients(ω[M,N], ω[M,O], ω[O, N], q_dims[1])
+
+N_M, N_M_sparsetensor = create_fusion_rules(F[M]) 
+N_N, N_N_sparsetensor = create_fusion_rules(F[N])
+N_O, N_O_sparsetensor = create_fusion_rules(F[O])
+N_X, N_X_sparsetensor = create_fusion_rules(ω[N,O])
+
+q_dims_C = q_dims[1]
+q_dims_D = q_dims[1]
+@show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
+
+@time U[M,N,O] = sparse_clebsch_gordon_coefficients(ω[M,N], ω[O,M], ω[O, N], q_dims_C, q_dims_D, N_O_sparsetensor, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
+save_ω(U[M,N,O])
 @show size(U[M,N,O])
 @show size(ω[M,N])
-pentagon_eqn(ω[M,N], U[M,N,O], ω[M,N], U[M,N,O], ω[O,N])
+@show size(make_peps(U[M,N,O])), size(make_mpo(U[M,N,O]))
+@show size(make_peps(ω[M,N])), size(make_mpo(ω[M,N]))
+@show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
 
-test = 0#pentagon_eqn(ω[M,N], ω[N,M], ω[M,N], U[M,N,O], ω[O,N])
-if test > 1e-9
-    println("Beep Boop: $(test)")
-else
-    println("Boop Beep: $(test)")
-end
+# dont forget conventions: ?
+# MPO # up down left right
+# PEPS # OutOfPage Up left Right
+
+# mpo_U = reindexdims(U[M,N,O],(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))# up down left right
+# mpo_U = reshape(mpo,(prod(size(U[M,N,O])[[5,1,2,7]]),prod(size(U[M,N,O])[[4,1,6,10]]),prod(size(U[M,N,O])[[2,3,6,9]]),prod(size(U[M,N,O])[[5,3,4,8]])))
+
+# peps_U = reindexdims(U[M,N,O],(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # OutOfPage Up Left Right
+# peps_U = reshape(peps,(prod(size(U[M,N,O])[[1,2,5,7]]),prod(size(U[M,N,O])[[5,3,4,8]]),prod(size(U[M,N,O])[[1,6,4,10]]),prod(size(U[M,N,O])[[2,3,6,9]])))
+@show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[N,O]))
+@tensor lhs[-1 -2 -3 -4 -5 -6] := make_fusion(U[M,N,O])[2 3 -1 -6 ] * make_mpo(ω[M,N])[2 -2 1 -5] * make_mpo(ω[O,M])[3 -3 -4 1]
+@tensor rhs[-1 -2 -3 -4 -5 -6] := make_mpo(ω[O,N])[-1 1 -4 -5] * make_fusion(U[M,N,O])[-2 -3 1 -6] 
+test = norm(lhs-rhs)
+@show test
+
+# test = pentagon_eqn( ω[M,N], U[M,N,O],U[M,N,O], ω[M,N], ω[N,O])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+# test = pentagon_eqn(U[M,N,O], ω[M,N],  ω[M,N],U[M,N,O], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(U[M,N,O], ω[M,N],  ω[M,N],ω[O,N], U[M,N,O])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(ω[M,N], U[M,N,O], U[M,N,O], ω[M,N], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+# test = pentagon_eqn(ω[M,N], U[M,N,O], ω[M,N], U[M,N,O], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(ω[M,N], U[M,N,O], ω[M,N], ω[O,N], U[M,N,O])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+# test = pentagon_eqn(ω[M,N], ω[M,N], ω[M,N], ω[O,N], U[M,N,O])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+# test = pentagon_eqn(ω[M,N], ω[M,N], ω[M,N], U[M,N,O], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(ω[M,N], ω[M,N], U[M,N,O], ω[M,N], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(ω[M,N], U[M,N,O], ω[M,N],  ω[M,N], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+# test = pentagon_eqn(U[M,N,O], ω[M,N], ω[M,N],  ω[M,N], ω[O,N])
+# if test > 1e-9
+#     println("Beep Boop: $(test)")
+# else
+#     println("Boop Beep: $(test)")
+# end
+
+
+#=
 
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
 for M in 1:n_modcats

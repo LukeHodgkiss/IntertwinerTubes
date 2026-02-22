@@ -56,6 +56,7 @@ println("Reading in F symbol data")
 ##########################
 # -  Doubled Haagerup  - #
 ##########################
+#=
 
 println("M=N=Doubled Haagerup")
 base_dir = @__DIR__
@@ -97,7 +98,6 @@ N_diag_blocks = size_dict[:module_label_M] * size_dict[:module_label_N]
 F = SparseArray{ComplexF64, 10}(F3_DOK, F3_shape)
 F_M = F
 F_N = F
-#=
 
 =#
 
@@ -344,8 +344,6 @@ if test > 1e-9
 else
     println("Boop Beep: $(test)")
 end
-
-
 
 #@tensor ρ_unitary[X, M1, Y1, N2, N1, M2, row, n1, m1, col] := ρ[X, M1, Y1_, N2_, N1_, M2, row, n1, m1, col] * sqrt(d_N_doubled[N1, N1_])/(sqrt(d_N_doubled[N2, N2_] * d_Y_doubled[Y1, Y1_]))
 
