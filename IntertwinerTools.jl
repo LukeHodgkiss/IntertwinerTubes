@@ -348,12 +348,14 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
     """
     Xa, M1, Y, N2, N1, M2, i_a, k_a, l_a, j_a
     Xb, O1, Y, M2, M1, O2, i_b, l_a, l_b, j_b
-    Xc, O2, Y, N1, N2, O1, i_c, k_a, l_b,  j_c
+    Xc, O1, Y, N2, N1, O2, i_c, k_a, l_b, j_c 
 
     N1, i_a, M1, i_b, O1, i_c = map
+        
     """
 
-    old_shape = (ω_MN_shape[5], ω_MN_shape[7], ω_OM_shape[5], ω_OM_shape[7], ω_NO_shape[6], ω_NO_shape[7], 
+    #old_shape = (ω_MN_shape[5], ω_MN_shape[7], ω_OM_shape[5], ω_OM_shape[7], ω_NO_shape[6], ω_NO_shape[7], 
+    old_shape = (ω_MN_shape[5], ω_MN_shape[7], ω_OM_shape[5], ω_OM_shape[7], ω_NO_shape[2], ω_NO_shape[7], 
                  ω_MN_shape[4], ω_MN_shape[10], ω_OM_shape[4], ω_OM_shape[10], ω_NO_shape[2], ω_NO_shape[10])
     @show old_shape
     half = length(old_shape)/2
@@ -368,6 +370,10 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
     FP_dim_D = FP_dimension(q_dims_D)
     @show d_O, d_N, d_X, FP_dim_C
 
+    @show size(ω_MN)
+    @show size(ω_OM)
+    @show size(ω_NO)
+    
     cart_ind_map = CartesianIndices(old_shape[1:6]) # reshape row index into N, i_a, M, i_b, O, i_c
     for a in 1:ω_MN_shape[1]
         for b in 1:ω_OM_shape[1]
@@ -381,15 +387,6 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                 #     SparseArray(d_N.^-1)[N2__] * 
                 #     SparseArray(d_O.^-1)[O1__] )
                
-
-                # ω_MN, ω_OM, ω_NO
-                @show size(ω_MN)
-                @show size(ω_OM)
-                @show size(ω_NO)
-                @show size(SparseArray(q_dims_C))
-                @show size(SparseArray(d_N.^-1))
-                @show size(SparseArray(d_O.^-1))
-
                 
                 # @tensor Trace_P_abc[] := (
                 #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,4,4,5,5,6,7,8,9))[M1, M1_, Y_, Y__, N1, N2_, N1, N1_, M1, M2_, i_a, k_a, l_a, i_a] *
@@ -408,41 +405,51 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                 #            SparseArray(q_dims_C)[Y__]  
                 #      )
 
-                @show size(reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9)  ))
-                @show size(reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9)))
-                @show size(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9)  ))
+            #     @tensor Trace_P_abc[] := (
+            #         reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M1, M2_, i_a, k_a, l_a, i_a] *
+            #         reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O1, O2_, i_b, l_a, l_b, i_b] *
+            #    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9)  )[O2_, Y__, N1, N1_, N1, N2_, O1_, i_c, k_a, l_b,    i_c]) *
+            #                SparseArray(q_dims_C)[Y]  
+            #          ) /FP_dim_C
+                
+            #     @show Trace_P_abc[]
 
-                @tensor Trace_P_abc[] := (
-                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M1, M2_, i_a, k_a, l_a, i_a] *
-                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O1, O2_, i_b, l_a, l_b, i_b] *
-               conj(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9)  )[O2_, Y__, N1, N1_, N1, N2_, O1_, i_c, k_a, l_b,    i_c]) *
-                           SparseArray(q_dims_C)[Y]  
-                     ) /FP_dim_C
-                #conj(ω_NO[O1, Y, N2, N1, O2, i_c, k_a, l_b,   j_c]) *
-                    
-                @show Trace_P_abc[]
+            #     if abs(Trace_P_abc[])<1e-10; continue; end 
 
-                if abs(Trace_P_abc[])<1e-10; continue; end 
-
+                # @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
+                #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
+                #     reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
+                #     conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9) )[O2_, Y__, N1, N1_, N2, N2_, O1_, i_c, k_a, l_b,    j_c]) *
+                #     SparseArray(q_dims_C)[Y]  
+                #      )/ FP_dim_C # this one works for 2,2,2
+                
+                #  M1, Y, N2, N1, M2, i_a, k_a, l_a, j_a
+                #  O1, Y, M2, M1, O2, i_b, l_a, l_b, j_b
+                #  O1, Y, N2, N1, O2, i_c, k_a, l_b, j_c
+                # @show size(reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1, 2,2,2, 3,3, 4,4, 5,5, 6,7,8,9) ))
+                # @show size(reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1, 2, 3, 4, 5,5, 6,7,8,9)))
+                # @show size(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1, 2, 3, 4, 5, 6,7,8,9) ))
+                # @show size(SparseArray(q_dims_C))
                 @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
-                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
-                conj(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9) )[O2_, Y__, N1, N1_, N2, N2_, O1_, i_c, k_a, l_b,    j_c]) *
-                           SparseArray(q_dims_C)[Y]  
-                     )
-                
+                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1, 2,2,2, 3,3, 4,4, 5,5, 6,7,8,9) )[ M1,M1_, Y,Y_,Y__, N2,N2_, N1,N1_, M2,M2_, i_a, k_a, l_a, j_a] *
+                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1, 2, 3, 4, 5,5, 6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
+                    #reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,3,4,5,5,6,7,8,9))[ O1, O1_,O2__, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
+                    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1, 2, 3, 4, 5, 6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
+                    SparseArray(q_dims_C)[Y__]  
+                     )/ FP_dim_C
 
-                P_abc = P_abc / FP_dim_C # * d_X[c] # I think FP dim already divided into quantum dims already by this stage?
-                
-                #@show old_shape = size(P_abc)[1:(length(size(P_abc))//2)]
-                #P_mat = reshape(P_abc, prod(old_shape), prod(old_shape))
                 P_mat = reshape(P_abc, dL, dR)
+                Trace_P_abc = tr(P_mat)
+                #@show Trace_P_abc
+                if abs(Trace_P_abc)<1e-10; continue; end 
 
                 # @show size(P_abc)
                 # @show size(P_mat)
 
-                @show norm(P_mat-P_mat')
-                
+
+                N_eigs =  round(Int, abs(tr(P_mat)))
+                #@show N_eigs
+
                 # if  size(P_mat)[1]==1
                 #     eval, eigvecs = eigen(P_mat)
                 #     λ_max = eval[1]
@@ -455,55 +462,34 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                 # P_mat = P_mat/λ_max
                 
                 #@show abs(tr(P_mat))
-                N_eigs =  round(Int, abs(tr(P_mat)))
-                @show N_eigs
-
-                # @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-                #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,3,3,3,4,4,5,5,6,7,8,9))[M1, M1_, Y_, N2, N2_, N2__, N1, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
-                #     reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, O1__, Y_, Y, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
-                #            conj(ω_NO[c,:,:,:,:,:,:,:,:,:][O1_, Y, N2_, N1_, O2_, i_c, k_a, l_b,   j_c]) *
-                #            SparseArray(d_N.^-1)[N2__] * 
-                #            SparseArray(d_O.^-1)[O1__]
-                #      )
-
-                @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,3,3,4,5,5,6,7,8,9) )[M1, M1_, Y_, N2_, N2__, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
-                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[O1, O1_, Y_, Y__, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
-               #conj(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,1,2,3,3,4,4,5,6,7,8,9) )[O2__,O2_, Y__, N1, N1_, N2, N2_, O1_, i_c, k_a, l_b,  j_c]) *
-               conj(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,5,6,7,8,9) )[O2_, Y__, N1, N1_, N2, N2_, O1_, O1__, i_c, k_a, l_b,  j_c]) *
-
-                           SparseArray(d_N.^-1)[N2__] * 
-                           SparseArray(d_O.^-1)[O1__] 
-                     )
                 
-            #     @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-            #         reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,3,4,4,5,5,6,7,8,9) )[M1, M1_, Y_, N2_, N1_,N1__, M2, M2_, i_a, k_a, l_a, j_a] *
-            #         reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
-            #    conj(reindexdims(ω_NO[a,:,:,:,:,:,:,:,:,:], (1,1,2,3,3,4,4,5,6,7,8,9)  )[O2_,O2__, Y__, N1, N1_, N2, N2_, O1_, i_c, k_a, l_b,    j_c]) *
-            #                SparseArray(d_N.^-1)[N1__] * 
-            #                SparseArray(d_O.^-1)[O2__] 
-            #          )
-                #H_mat = reshape(P_abc, dL, dR) # Hermitian
- 
-                H_mat = reshape(H_abc, dL, dR) # Hermitian
-                #H_mat = H_mat/ FP_dim_C
-                #@assert  norm(H_mat-H_mat') < 1e-9
-                @show norm(H_mat-H_mat')
-
+                @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
+                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,4,4,4,5,5,6,7,8,9) )[ M1, M1_, Y,Y_, N2,N2_, N1,N1_,N1__, M2,M2_, i_a, k_a, l_a, j_a] *
+                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,3,4,5,5,5,6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_,O2__, i_b, l_a, l_b, j_b] *
+                    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,4,5,6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
+                    SparseArray(d_N.^-1)[N1__] * 
+                    SparseArray(d_O.^-1)[O2__] 
+                )
+           
+                H_mat = reshape(H_abc, dL, dR) 
+                @assert norm(H_mat-H_mat') < 1e-10
+                #@show norm(H_mat-H_mat')
+                
                 if abs(N_eigs) > 1e-10 # YOU SHALL NOT PASS!!!!!!
                     println("abc = ($a,$b,$c) has N_eigs = $N_eigs")
-                    @show size(P_mat), size(H_mat), N_eigs
-                    @show norm(P_mat*P_mat - P_mat)
+                    #@show size(P_mat), size(H_mat), N_eigs
+                    @assert norm(P_mat*P_mat - P_mat) <1e-10
+                    #@show norm(P_mat*P_mat - P_mat)
                     if size(H_mat)[1] ==1 #  || 
                         eigvals, eigvecs = eigen(H_mat)
                     elseif N_eigs == size(H_mat)[1] 
                         eigvals, eigvecs = eigen(H_mat)
                     else
                         #eigvals, eigvecs = eigs(Hermitian(H_mat); nev=N_eigs)
-                        #@show 
-                        eigvals, eigvecs = eigen(Matrix(H_mat))#eigs(H_mat; nev=N_eigs)
+                        eigvals, eigvecs = eigs(H_mat; nev=N_eigs)
+                        #eigvals, eigvecs = eigen(Matrix(H_mat))#eigs(H_mat; nev=N_eigs)
                     end
-                    @show eigvals
+                    #@show eigvals
                     #eigvecs[abs.(eigvecs) .< 1e-10] .= 0
                     #eigvecs = abs.(eigvecs)# * Diagonal(exp.(-im .* angle.(eigvecs[1, :])))
                     eigvecs = make_cols_real(eigvecs)
@@ -519,13 +505,12 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                             end
 
                             N1, i_a, M1, i_b, O1, i_c = Tuple(cart_ind_map[row_index])
-                            key = SVector{10,Int}((a,b, M1, N1, c, O1, col_index, i_c, i_b, i_a)) # corrected one w/ laurens
-                           
-                            #key = SVector{10,Int}((b,a, M1, N1, c, O1, col_index, i_c, i_b, i_a))
-                            #key = SVector{10,Int}((O1, a, b, N1, M1, c, i_a, i_b, col_index, i_c))
-                            #key = SVector{10,Int}((O1, b, a, N1, M1, c, i_b, i_a, col_index, i_c))
-                            #key = SVector{10,Int}((O1, a, b, M1, N1, c, i_a, i_b, col_index, i_c))
+                            key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_c, i_b, i_a) # corrected one w/ laurens
+                            #key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_c, i_a, i_b)
                             
+                            #val = val * (d_O.^-0.5)[O1]  * (d_N.^-0.5)[N1]
+                            #val = val * (d_O)[O1]  * (d_N)[N1]
+
                             push!(U_keys_vec, key)
                             push!(U_vals_vec, val)
                         end
@@ -558,7 +543,3 @@ end
 end # Module
 
 
-
-                    #conj(ω_NO[c,:,:,:,:,:,:,:,:,:][O1_, Y, N2_, N1_, O2_, i_c, k_a, l_b,   j_c]) * #worked very nicely
-                    #conj(ω_NO[c,:,:,:,:,:,:,:,:,:][O2_, Y, N2_, N1_, O1_, i_c,l_b,  k_a,  j_c]) * 
-                    #conj(ω_NO[c,:,:,:,:,:,:,:,:,:][N1_, Y, O2_, O1_, N2_, i_c, k_a, l_b,   j_c]) *

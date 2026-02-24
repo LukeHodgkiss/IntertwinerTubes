@@ -156,7 +156,7 @@ end
 
   
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
-M,N,O = 2,5,2
+M,N,O = 1,1,1
 println("Modcats: $((M,N,O))")
 
 N_M, N_M_sparsetensor = create_fusion_rules(F[M]) 
@@ -168,7 +168,7 @@ q_dims_C = q_dims[1]
 q_dims_D = q_dims[1]
 @show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
 
-@time U[M,N,O] = sparse_clebsch_gordon_coefficients(ω[M,N], ω[O,M], ω[O, N], q_dims_C, q_dims_D, N_O_sparsetensor, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
+@time U[M,N,O] = sparse_clebsch_gordon_coefficients(ω[M,N], ω[O,M], ω[O,N], q_dims_C, q_dims_D, N_O_sparsetensor, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
 save_ω(U[M,N,O])
 @show size(U[M,N,O])
 @show size(ω[M,N])
@@ -185,11 +185,13 @@ save_ω(U[M,N,O])
 
 # peps_U = reindexdims(U[M,N,O],(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # OutOfPage Up Left Right
 # peps_U = reshape(peps,(prod(size(U[M,N,O])[[1,2,5,7]]),prod(size(U[M,N,O])[[5,3,4,8]]),prod(size(U[M,N,O])[[1,6,4,10]]),prod(size(U[M,N,O])[[2,3,6,9]])))
-@show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[N,O]))
+@show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[O,M])), size(make_mpo(ω[O,N]))
 @tensor lhs[-1 -2 -3 -4 -5 -6] := make_fusion(U[M,N,O])[2 3 -1 -6 ] * make_mpo(ω[M,N])[2 -2 1 -5] * make_mpo(ω[O,M])[3 -3 -4 1]
 @tensor rhs[-1 -2 -3 -4 -5 -6] := make_mpo(ω[O,N])[-1 1 -4 -5] * make_fusion(U[M,N,O])[-2 -3 1 -6] 
-test = norm(lhs-rhs)
-@show test
+
+@show test = norm(lhs-rhs)
+
+
 
 # test = pentagon_eqn( ω[M,N], U[M,N,O],U[M,N,O], ω[M,N], ω[N,O])
 # if test > 1e-9
