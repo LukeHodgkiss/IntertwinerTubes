@@ -345,40 +345,68 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
     ω_OM_shape = size(ω_OM)
     ω_NO_shape = size(ω_NO)
 
-    """
-    Xa, M1, Y, N2, N1, M2, i_a, k_a, l_a, j_a
-    Xb, O1, Y, M2, M1, O2, i_b, l_a, l_b, j_b
-    Xc, O1, Y, N2, N1, O2, i_c, k_a, l_b, j_c 
-
-    N1, i_a, M1, i_b, O1, i_c = map
-        
-    """
-
     #old_shape = (ω_MN_shape[5], ω_MN_shape[7], ω_OM_shape[5], ω_OM_shape[7], ω_NO_shape[6], ω_NO_shape[7], 
     old_shape = (ω_MN_shape[5], ω_MN_shape[7], ω_OM_shape[5], ω_OM_shape[7], ω_NO_shape[2], ω_NO_shape[7], 
                  ω_MN_shape[4], ω_MN_shape[10], ω_OM_shape[4], ω_OM_shape[10], ω_NO_shape[2], ω_NO_shape[10])
-    @show old_shape
     half = length(old_shape)/2
     dL = prod(old_shape[1:half])
     dR = dL #prod(old_shape[half+1:end])
 
+    # Compute quantum dimensions
     d_O = compute_q_dims(N_O)
     d_N = compute_q_dims(N_N)
     d_X = compute_q_dims(N_X)
-    #d_O, d_N, d_X = [1.0], [1.0], [1.0, 1.0, 1.0]
     FP_dim_C = FP_dimension(q_dims_C)
     FP_dim_D = FP_dimension(q_dims_D)
-    @show d_O, d_N, d_X, FP_dim_C
 
-    @show size(ω_MN)
-    @show size(ω_OM)
-    @show size(ω_NO)
+    # Build Inex Maps
+    ω_a_MN_shape_unfolded = (size(ω_MN)[[2,5,7]], size(ω_MN)[[6,4,10]], size(ω_MN)[[5,3,4,8]], size(ω_MN)[[2,3,6,9]])
+    ω_a_MN_shape_folded = (prod(ω_a_MN_shape_unfolded[1]), prod(ω_a_MN_shape_unfolded[2]), prod(ω_a_MN_shape_unfolded[3]), prod(ω_a_MN_shape_unfolded[4]))
+    @show ω_a_MN_shape_folded
+
+    ω_b_OM_shape_unfolded = (size(ω_OM)[[2,5,7]], size(ω_OM)[[6,4,10]], size(ω_OM)[[5,3,4,8]], size(ω_OM)[[2,3,6,9]])
+    ω_b_OM_shape_folded = (prod(ω_b_OM_shape_unfolded[1]), prod(ω_b_OM_shape_unfolded[2]), prod(ω_b_OM_shape_unfolded[3]), prod(ω_b_OM_shape_unfolded[4]))
+    @show ω_b_OM_shape_folded
+
+    ω_NO = reindexdims(ω_NO, (1,2,3,4,5,6,7,9,8,10)) #because inverse
+
+    ω_c_NO_shape_unfolded = (size(ω_NO)[[2,5,7]], size(ω_NO)[[6,4,10]], size(ω_NO)[[5,3,4,8]], size(ω_NO)[[2,3,6,9]])
+    ω_c_NO_shape_folded = (prod(ω_c_NO_shape_unfolded[1]), prod(ω_c_NO_shape_unfolded[2]), prod(ω_c_NO_shape_unfolded[3]), prod(ω_c_NO_shape_unfolded[4]))
+    @show ω_c_NO_shape_folded
+
+    P_shape_unfolded = (ω_a_MN_shape_unfolded[1], ω_b_OM_shape_unfolded[1], ω_c_NO_shape_unfolded[1],
+                        ω_a_MN_shape_unfolded[2], ω_b_OM_shape_unfolded[2], ω_c_NO_shape_unfolded[2])
+
+    P_mat_shape = prod((ω_a_MN_shape_unfolded[1]..., ω_b_OM_shape_unfolded[1]..., ω_c_NO_shape_unfolded[1]...)), prod((ω_a_MN_shape_unfolded[2]..., ω_b_OM_shape_unfolded[2]..., ω_c_NO_shape_unfolded[2]...))
+
+    cart_ind_map = CartesianIndices((ω_a_MN_shape_unfolded[1]..., ω_b_OM_shape_unfolded[1]..., ω_c_NO_shape_unfolded[1]...)) # reshape row index into N, i_a, M, i_b, O, i_c
     
-    cart_ind_map = CartesianIndices(old_shape[1:6]) # reshape row index into N, i_a, M, i_b, O, i_c
+    # Build tetrahedron
+    ω_MN = reindexdims(ω_MN, (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+    ω_MN_undimmed = ω_MN
+    @tensor ω_MN[-1 -2 -3 -4 -5 -6 -7 -8 -9 -10 -11 -12 -13 -14 -15] := ω_MN[-1 -2 -3 -4 -5 -6 -7 -8 -9 1 -10 -11 -12 -13 -14 -15] * SparseArray(q_dims_C)[1]
+    ω_MN = reindexdims(ω_MN, (1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 10, 11, 12, 13, 14, 15))
+    
+    ω_OM = reindexdims(ω_OM, (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+
+    ω_NO = reindexdims(ω_NO, (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+ 
+    
     for a in 1:ω_MN_shape[1]
+        ω_MN_a = ω_MN[a,:,:,: ,a,:,:,: ,:,:,:,: ,:,:,:,: ]
+        ω_MN_a = reshape(ω_MN_a, ω_a_MN_shape_folded)
+        #ω_MN_undimmed_a = ω_MN_undimmed[a,:,:,: ,a,:,:,: ,:,:,:,: ,:,:,:,: ]
+        #ω_MN_undimmed_a = reshape(ω_MN_undimmed_a, ω_a_MN_shape_folded)
         for b in 1:ω_OM_shape[1]
+            ω_OM_b = ω_OM[b,:,:,: ,b,:,:,: ,:,:,:,: ,:,:,:,: ]
+            ω_OM_b = reshape(ω_OM_b, ω_b_OM_shape_folded)
             for c in 1:ω_NO_shape[1]
-                 
+                ω_NO_c = ω_NO[c,:,:,: ,c,:,:,: ,:,:,:,: ,:,:,:,: ]
+                ω_NO_c = reshape(ω_NO_c, ω_c_NO_shape_folded)
+                @tensor Trace_P_abc[] := ω_MN_a[4 4 3 1] * ω_OM_b[5 5 1 2] * conj(ω_NO_c[6 6 2 3]) / FP_dim_C
+
+                #@show size(P_abc), P_mat_shape
+               
                 # @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
                 #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,3,4,4,5,5,6,7,8,9))[M1, M1_, Y__, Y_, N2, N2_, N2__, N1, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
                 #     reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,2,3,4,5,5,6,7,8,9))[ O1, O1_, O1__, Y_, Y, M2_, M1_, O2, O2_, i_b, l_a, l_b, j_b] *
@@ -405,16 +433,19 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                 #            SparseArray(q_dims_C)[Y__]  
                 #      )
 
-            #     @tensor Trace_P_abc[] := (
-            #         reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M1, M2_, i_a, k_a, l_a, i_a] *
-            #         reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O1, O2_, i_b, l_a, l_b, i_b] *
-            #    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9)  )[O2_, Y__, N1, N1_, N1, N2_, O1_, i_c, k_a, l_b,    i_c]) *
-            #                SparseArray(q_dims_C)[Y]  
-            #          ) /FP_dim_C
-                
-            #     @show Trace_P_abc[]
+                #     @tensor Trace_P_abc[] := (
+                #         reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M1, M2_, i_a, k_a, l_a, i_a] *
+                #         reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9))[O1, O1_, Y_, Y__, M2_, M1_, O1, O2_, i_b, l_a, l_b, i_b] *
+                #    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,3,4,4,5,6,7,8,9)  )[O2_, Y__, N1, N1_, N1, N2_, O1_, i_c, k_a, l_b,    i_c]) *
+                #                SparseArray(q_dims_C)[Y]  
+                #          ) /FP_dim_C
+                    
+                #     @show Trace_P_abc[]
 
-            #     if abs(Trace_P_abc[])<1e-10; continue; end 
+                if abs(Trace_P_abc[])<1e-10; continue; end 
+                @tensor P_abc[-1 -2 -3 -4 -5 -6] := ω_MN_a[-1 -4 3 1] * ω_OM_b[-2 -5 1 2] * conj(ω_NO_c[-3 -6 2 3]) / FP_dim_C
+                P_mat = reshape(P_abc, P_mat_shape) 
+                
 
                 # @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
                 #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,4,5,5,6,7,8,9) )[M1, M1_, Y, Y_, N2_, N1_, M2, M2_, i_a, k_a, l_a, j_a] *
@@ -423,69 +454,70 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                 #     SparseArray(q_dims_C)[Y]  
                 #      )/ FP_dim_C # this one works for 2,2,2
                 
-                #  M1, Y, N2, N1, M2, i_a, k_a, l_a, j_a
-                #  O1, Y, M2, M1, O2, i_b, l_a, l_b, j_b
-                #  O1, Y, N2, N1, O2, i_c, k_a, l_b, j_c
-                # @show size(reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1, 2,2,2, 3,3, 4,4, 5,5, 6,7,8,9) ))
-                # @show size(reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1, 2, 3, 4, 5,5, 6,7,8,9)))
-                # @show size(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1, 2, 3, 4, 5, 6,7,8,9) ))
-                # @show size(SparseArray(q_dims_C))
-                @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1, 2,2,2, 3,3, 4,4, 5,5, 6,7,8,9) )[ M1,M1_, Y,Y_,Y__, N2,N2_, N1,N1_, M2,M2_, i_a, k_a, l_a, j_a] *
-                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1, 2, 3, 4, 5,5, 6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
-                    #reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,3,4,5,5,6,7,8,9))[ O1, O1_,O2__, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
-                    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1, 2, 3, 4, 5, 6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
-                    SparseArray(q_dims_C)[Y__]  
-                     )/ FP_dim_C
+                # @tensor P_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
+                #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1, 2,2,2, 3,3, 4,4, 5,5, 6,7,8,9) )[ M1,M1_, Y,Y_,Y__, N2,N2_, N1,N1_, M2,M2_, i_a, k_a, l_a, j_a] *
+                #     reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1, 2, 3, 4, 5,5, 6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
+                #     #reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,1,2,3,4,5,5,6,7,8,9))[ O1, O1_,O2__, Y, M2_, M1_, O2,O2_, i_b, l_a, l_b, j_b] *
+                #     conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1, 2, 3, 4, 5, 6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
+                #     SparseArray(q_dims_C)[Y__]  
+                #      )/ FP_dim_C
 
-                P_mat = reshape(P_abc, dL, dR)
-                Trace_P_abc = tr(P_mat)
-                #@show Trace_P_abc
-                if abs(Trace_P_abc)<1e-10; continue; end 
+                # P_mat = reshape(P_abc, dL, dR)
+                # Trace_P_abc = tr(P_mat)
+                # @show Trace_P_abc
+                # if abs(Trace_P_abc)<1e-10; continue; end 
 
                 # @show size(P_abc)
                 # @show size(P_mat)
 
+                #N_eigs =  round(Int, abs(tr(P_mat)))
+                N_eigs =  round(Int, abs(Trace_P_abc[]))
 
-                N_eigs =  round(Int, abs(tr(P_mat)))
                 #@show N_eigs
 
-                # if  size(P_mat)[1]==1
-                #     eval, eigvecs = eigen(P_mat)
-                #     λ_max = eval[1]
-                # else
-                #     eval, eigvecs = eigs(P_mat; nev=1)
-                #     λ_max = eval[1]
-                # end
+                if  size(P_mat)[1]==1
+                    eval, eigvecs = eigen(P_mat)
+                    λ_max = eval[1]
+                else
+                    eval, eigvecs = eigs(P_mat; nev=1)
+                    λ_max = eval[1]
+                end
                 
-                # if abs(λ_max)<1; continue; end # why was this here?
-                # P_mat = P_mat/λ_max
+                #if abs(λ_max)<1; continue; end # why was this here?
+                P_mat = P_mat/λ_max
                 
                 #@show abs(tr(P_mat))
                 
-                @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
-                    reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,4,4,4,5,5,6,7,8,9) )[ M1, M1_, Y,Y_, N2,N2_, N1,N1_,N1__, M2,M2_, i_a, k_a, l_a, j_a] *
-                    reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,3,4,5,5,5,6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_,O2__, i_b, l_a, l_b, j_b] *
-                    conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,4,5,6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
-                    SparseArray(d_N.^-1)[N1__] * 
-                    SparseArray(d_O.^-1)[O2__] 
-                )
+                # @tensor H_abc[N1, i_a, M1, i_b, O1, i_c, N2, j_a, M2, j_b, O2, j_c] := (
+                #     reindexdims(ω_MN[a,:,:,:,:,:,:,:,:,:], (1,1,2,2,3,3,4,4,4,5,5,6,7,8,9) )[ M1, M1_, Y,Y_, N2,N2_, N1,N1_,N1__, M2,M2_, i_a, k_a, l_a, j_a] *
+                #     reindexdims(ω_OM[b,:,:,:,:,:,:,:,:,:], (1,1,2,3,4,5,5,5,6,7,8,9))[ O1, O1_, Y, M2_, M1_, O2,O2_,O2__, i_b, l_a, l_b, j_b] *
+                #     conj(reindexdims(ω_NO[c,:,:,:,:,:,:,:,:,:], (1,2,3,4,5,6,7,8,9) )[ O1_, Y_, N2_, N1_, O2_, i_c, k_a, l_b, j_c]) *
+                #     SparseArray(d_N.^-1)[N1__] * 
+                #     SparseArray(d_O.^-1)[O2__] 
+                # )
            
-                H_mat = reshape(H_abc, dL, dR) 
-                @assert norm(H_mat-H_mat') < 1e-10
-                #@show norm(H_mat-H_mat')
+                # H_mat = reshape(H_abc, dL, dR) 
+                # @assert norm(H_mat-H_mat') < 1e-10
                 
+                H_mat = P_mat
+                
+
                 if abs(N_eigs) > 1e-10 # YOU SHALL NOT PASS!!!!!!
                     println("abc = ($a,$b,$c) has N_eigs = $N_eigs")
-                    #@show size(P_mat), size(H_mat), N_eigs
-                    @assert norm(P_mat*P_mat - P_mat) <1e-10
-                    #@show norm(P_mat*P_mat - P_mat)
-                    if size(H_mat)[1] ==1 #  || 
+                    @show size(P_mat), size(H_mat), N_eigs
+
+                    @show norm(P_mat*P_mat - P_mat)
+                    @show norm(H_mat-H_mat') 
+
+                    @assert norm(P_mat*P_mat - P_mat) < 1e-12
+                    @show size(P_mat)
+                    if size(H_mat)[1] ==1 # || N_eigs == size(H_mat)[1] 
                         eigvals, eigvecs = eigen(H_mat)
                     elseif N_eigs == size(H_mat)[1] 
                         eigvals, eigvecs = eigen(H_mat)
                     else
                         #eigvals, eigvecs = eigs(Hermitian(H_mat); nev=N_eigs)
+                        println("sparse")
                         eigvals, eigvecs = eigs(H_mat; nev=N_eigs)
                         #eigvals, eigvecs = eigen(Matrix(H_mat))#eigs(H_mat; nev=N_eigs)
                     end
@@ -497,16 +529,21 @@ function sparse_clebsch_gordon_coefficients(ω_MN, ω_OM, ω_NO, q_dims_C, q_dim
                     #@show norm(eigvecs), N_eigs
                     @inbounds for col_index in 1:size(eigvecs,2)
                         for row_index in 1:size(eigvecs,1)
+                            #@show row_index,col_index
                             val = eigvecs[row_index,col_index] 
                             #val = eigvecs[row_index,col_index]*eigvals[col_index]
                             
                             if abs(val)<tol
                                 continue
                             end
-
-                            N1, i_a, M1, i_b, O1, i_c = Tuple(cart_ind_map[row_index])
-                            key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_c, i_b, i_a) # corrected one w/ laurens
+                            #@show Tuple(cart_ind_map[row_index])
+                            #N1,M1_,i_a, M1,O1_,i_b, O1,N1_,i_c = Tuple(cart_ind_map[row_index])
+                            N1,M1_,i_a, M1,O1_,i_b, O1,N1_,i_c = Tuple(cart_ind_map[row_index])
+                            
+                            key = SVector{10,Int}(a, b, N1, M1, c, O1, col_index, i_c, i_b, i_a)
+                            #key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_c, i_b, i_a) # corrected one w/ laurens
                             #key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_c, i_a, i_b)
+                            #key = SVector{10,Int}(a, b, O1, N1, c, M1, col_index, i_a, i_b, i_c)
                             
                             #val = val * (d_O.^-0.5)[O1]  * (d_N.^-0.5)[N1]
                             #val = val * (d_O)[O1]  * (d_N)[N1]

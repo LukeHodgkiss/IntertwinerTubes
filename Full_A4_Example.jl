@@ -156,7 +156,7 @@ end
 
   
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
-M,N,O = 1,1,1
+M,N,O = 5,5,5
 println("Modcats: $((M,N,O))")
 
 N_M, N_M_sparsetensor = create_fusion_rules(F[M]) 
@@ -176,9 +176,6 @@ save_ω(U[M,N,O])
 @show size(make_peps(ω[M,N])), size(make_mpo(ω[M,N]))
 @show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
 
-# dont forget conventions: ?
-# MPO # up down left right
-# PEPS # OutOfPage Up left Right
 
 # mpo_U = reindexdims(U[M,N,O],(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))# up down left right
 # mpo_U = reshape(mpo,(prod(size(U[M,N,O])[[5,1,2,7]]),prod(size(U[M,N,O])[[4,1,6,10]]),prod(size(U[M,N,O])[[2,3,6,9]]),prod(size(U[M,N,O])[[5,3,4,8]])))
@@ -192,6 +189,8 @@ save_ω(U[M,N,O])
 @show test = norm(lhs-rhs)
 
 
+# Make 16 index tetrahedron, then dot in, then reshape, then squidge
+
 
 # test = pentagon_eqn( ω[M,N], U[M,N,O],U[M,N,O], ω[M,N], ω[N,O])
 # if test > 1e-9
@@ -200,7 +199,7 @@ save_ω(U[M,N,O])
 #     println("Boop Beep: $(test)")
 # end
 
-# test = pentagon_eqn(U[M,N,O], ω[M,N],  ω[M,N],U[M,N,O], ω[O,N])
+# test = pentagon_eqn(U[M,N,O], ω[M,N], ω[M,N], U[M,N,O], ω[O,N])
 # if test > 1e-9
 #     println("Beep Boop: $(test)")
 # else
