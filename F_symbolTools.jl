@@ -2,7 +2,7 @@ module FSymbolTools
 
 export F_vec_G, F_mod_cat_Vec_Vec_G, triple_line_to_linear_index, remove_zeros!, slice_sparse_tensor, tuple_to_index, index_to_tuple, SparseSliceView, dropnearzeros!, F_mod_cat_Vec_G_Vec_G, pentagon_eqn, make_mpo, make_peps,make_fusion, compute_q_dims, make_cols_real #, reindexdims
 
-using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs
+using SparseArrayKit: SparseArray, nonzero_values, nonzero_keys, nonzero_pairs, reindexdims
 using LinearAlgebra
 using TensorOperations
 using TupleTools
@@ -37,23 +37,23 @@ end
 
 """
 Permutes and duplicates axes of a sparse tensor `F` according to `new_axes`.
-"""
-function reindexdims(F::SparseArray{T,N}, new_axes::NTuple{K,Int}) where {T,N,K}
-    # Determine new shape
-    old_shape = size(F)
-    new_shape = ntuple(i -> old_shape[new_axes[i]], length(new_axes))
+# """
+# function reindexdims(F::SparseArray{T,N}, new_axes::NTuple{K,Int}) where {T,N,K}
+#     # Determine new shape
+#     old_shape = size(F)
+#     new_shape = ntuple(i -> old_shape[new_axes[i]], length(new_axes))
 
-    # Build new coordinate dictionary
-    coord_dict = Dict{CartesianIndex{length(new_axes)}, T}()
+#     # Build new coordinate dictionary
+#     coord_dict = Dict{CartesianIndex{length(new_axes)}, T}()
     
-    for (old_idx, val) in pairs(F.data)
-        old_tuple = Tuple(old_idx)
-        new_tuple = ntuple(i -> old_tuple[new_axes[i]], length(new_axes))
-        coord_dict[CartesianIndex(new_tuple)] = val
-    end
+#     for (old_idx, val) in pairs(F.data)
+#         old_tuple = Tuple(old_idx)
+#         new_tuple = ntuple(i -> old_tuple[new_axes[i]], length(new_axes))
+#         coord_dict[CartesianIndex(new_tuple)] = val
+#     end
 
-    return SparseArray{T, length(new_axes)}(coord_dict, new_shape)
-end
+#     return SparseArray{T, length(new_axes)}(coord_dict, new_shape)
+# end
 """
 function reindexdims(A::SparseArray, p::IndexTuple)
     C = similar(A, TupleTools.getindices(size(A), p))
@@ -333,13 +333,32 @@ function make_mpo(F)
 end
 
 function make_peps(F)
-    peps = reindexdims(F,(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # Left Right Down OutOfPage  
-    peps = reshape(peps,(prod(size(F)[[1,2,5,7]]),prod(size(F)[[5,3,4,8]]),prod(size(F)[[1,6,4,10]]),prod(size(F)[[2,3,6,9]])))
+    peps = reindexdims(F, (1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # Left Right Down OutOfPage  
+    F_size = size(F)
+    @show size(peps)
+    # @show prod(F_size[[1,2,5,7]]), F_size[[1,2,5,7]]
+    # @show prod(size(F)[[1,2,5,7]]), size(F)[[1,2,5,7]]
+
+    # @show prod(F_size[[1,2,5,7]]), F_size[[1,2,5,7]]
+    # @show prod(size(F)[[1,2,5,7]]), size(F)[[1,2,5,7]]
+
+    #peps = reshape(peps, (prod(F_size[[1,2,5,7]]), prod(F_size[[5,3,4,8]]), prod(F_size[[1,6,4,10]]), prod(F_size[[2,3,6,9]])))
+    #peps = reshape(peps,(prod(size(F)[[1,2,5,7]]), prod(size(F)[[5,3,4,8]]), prod(size(F)[[1,6,4,10]]), prod(size(F)[[2,3,6,9]])))
+    #@show size(peps)
+
+    s = size(peps)  # length-16 tuple, sized correctly from reindexdims
+    peps = reshape(peps, (
+        prod(s[1:4]),    # Left      — legs (1,2,5,7)
+        prod(s[5:8]),    # Right     — legs (5,3,4,8)
+        prod(s[9:12]),   # Down      — legs (1,6,4,10)
+        prod(s[13:16])   # OutOfPage — legs (2,3,6,9)
+    ))
+    
     return peps
 end
 
 function make_fusion(F)
-    peps = reindexdims(F,(4,1,6,10, 6,2,3,9, 4,5,3,8, 1,2,5,7)) #  Up Left Right OutOfPage
+    peps = reindexdims(F, (4,1,6,10, 6,2,3,9, 4,5,3,8, 1,2,5,7)) # Up Left Right OutOfPage
     peps = reshape(peps,(prod(size(F)[[4,1,6,10]]),prod(size(F)[[6,2,3,9]]),prod(size(F)[[4,5,3,8]]),prod(size(F)[[1,2,5,7]])))
     return peps
 end

@@ -156,7 +156,8 @@ end
 
   
 U = Array{SparseArray{ComplexF64, 10}}(undef, n_modcats, n_modcats, n_modcats)
-M,N,O = 5,5,5
+N,M,O = 3,3,3
+
 println("Modcats: $((M,N,O))")
 
 N_M, N_M_sparsetensor = create_fusion_rules(F[M]) 
@@ -169,28 +170,67 @@ q_dims_D = q_dims[1]
 @show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
 
 @time U[M,N,O] = sparse_clebsch_gordon_coefficients(ω[M,N], ω[O,M], ω[O,N], q_dims_C, q_dims_D, N_O_sparsetensor, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
+#@time U_MNO = sparse_clebsch_gordon_coefficients(ω[M,N], ω[O,M], ω[O,N], q_dims_C, q_dims_D, N_O_sparsetensor, N_M_sparsetensor, N_N_sparsetensor, N_X_sparsetensor)
+#@show size(make_peps(U_MNO))
+
 save_ω(U[M,N,O])
 @show size(U[M,N,O])
 @show size(ω[M,N])
-@show size(make_peps(U[M,N,O])), size(make_mpo(U[M,N,O]))
+@show size(make_peps(U[M,N,O]))
+@show size(make_mpo(U[M,N,O]))
 @show size(make_peps(ω[M,N])), size(make_mpo(ω[M,N]))
 @show size(ω[M,N][1,:,:,:,:,:,:,:,:,:])
 
+# U_MNO = reindexdims(U[M,N,O], (4,1,6,8, 6,2,3,9, 4,5,3,10, 1,2,5,7)) # X1 fusiin line, X2 fusion line, X3 fusion line, multipliicty line
+# U_MNO = reshape(U_MNO,(prod(size(U[M,N,O])[[4,1,6,8]]),prod(size(U[M,N,O])[[6,2,3,9]]),prod(size(U[M,N,O])[[4,5,3,10]]),prod(size(U[M,N,O])[[1,2,5,7]])))
+#@show size(U_MNO)
+
+perm = (4,1,6,10, 6,2,3,9, 4,5,3,8, 1,2,5,7)
+U_MNO = reindexdims(U[M,N,O], perm) # Up Left Right OutOfPage
+@show perm[1:4]
+U_size = size(U[M,N,O])
+
+dim1 = prod(U_size[i] for i in perm[1:4])
+dim2 = prod(U_size[i] for i in perm[5:8])
+dim3 = prod(U_size[i] for i in perm[9:12])   
+dim4 = prod(U_size[i] for i in perm[13:16])  
+
+U_MNO = reshape(U_MNO, (dim1, dim2, dim3, dim4))
+
+# Left Right Down Out
+# MPO # left right down up
+@show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[O,M])), size(make_mpo(ω[O,N]))
+# @tensor lhs[-1 -2 -3 -4 -5 -6] := U_MNO[2 3 -1 -6 ] * make_mpo(ω[M,N])[2 -2 1 -5] * make_mpo(ω[O,M])[3 -3 -4 1]
+# @tensor rhs[-1 -2 -3 -4 -5 -6] := make_mpo(ω[O,N])[-1 1 -4 -5] * U_MNO[-2 -3 1 -6] 
+
+@tensor lhs[-1 -2 -3 -4 -5 -6] := U_MNO[2 3 -1 -6 ] * make_mpo(ω[M,N])[-2 2  1 -5] * make_mpo(ω[O,M])[3 -3 -4 1]
+@tensor rhs[-1 -2 -3 -4 -5 -6] := make_mpo(ω[O,N])[-1 1 -4 -5] * U_MNO[-2 -3 1 -6] 
+
+@show test = norm(lhs-rhs) 
+
 
 # mpo_U = reindexdims(U[M,N,O],(5,1,2,7, 4,1,6,10, 2,3,6,9, 5,3,4,8))# up down left right
-# mpo_U = reshape(mpo,(prod(size(U[M,N,O])[[5,1,2,7]]),prod(size(U[M,N,O])[[4,1,6,10]]),prod(size(U[M,N,O])[[2,3,6,9]]),prod(size(U[M,N,O])[[5,3,4,8]])))
+# mpo_U = reshape(mpo_U)
 
 # peps_U = reindexdims(U[M,N,O],(1,2,5,7, 5,3,4,8, 1,6,4,10, 2,3,6,9)) # OutOfPage Up Left Right
-# peps_U = reshape(peps,(prod(size(U[M,N,O])[[1,2,5,7]]),prod(size(U[M,N,O])[[5,3,4,8]]),prod(size(U[M,N,O])[[1,6,4,10]]),prod(size(U[M,N,O])[[2,3,6,9]])))
-@show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[O,M])), size(make_mpo(ω[O,N]))
-@tensor lhs[-1 -2 -3 -4 -5 -6] := make_fusion(U[M,N,O])[2 3 -1 -6 ] * make_mpo(ω[M,N])[2 -2 1 -5] * make_mpo(ω[O,M])[3 -3 -4 1]
-@tensor rhs[-1 -2 -3 -4 -5 -6] := make_mpo(ω[O,N])[-1 1 -4 -5] * make_fusion(U[M,N,O])[-2 -3 1 -6] 
+# peps_U = reshape(peps_U,(prod(size(U[M,N,O])[[1,2,5,7]]),prod(size(U[M,N,O])[[5,3,4,8]]),prod(size(U[M,N,O])[[1,6,4,10]]),prod(size(U[M,N,O])[[2,3,6,9]])))
+# @show size( make_fusion(U[M,N,O])), size(make_mpo(ω[M,N])), size(make_mpo(ω[O,M])), size(make_mpo(ω[O,N]))
 
-@show test = norm(lhs-rhs)
+# ω_MN = reindexdims(ω[M,N], (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+# ω_MN = reshape(ω_MN,(prod(size(ω[M,N])[[1,2,5,7]]), prod(size(ω[M,N])[[1,6,4,10]]), prod(size(ω[M,N])[[5,3,4,8]]),prod(size(ω[M,N])[[2,3,6,9]])))
+    
+# ω_OM = reindexdims(ω[O,M], (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+# ω_OM = reshape(ω_OM,(prod(size(ω[O,M])[[1,2,5,7]]),prod(size(ω[O,M])[[1,6,4,10]]),prod(size(ω[O,M])[[5,3,4,8]]),prod(size(ω[O,M])[[2,3,6,9]])))
+
+# ω_ON = reindexdims(ω[O,N], (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+# ω_ON = reshape(ω_ON,(prod(size(ω[O,N])[[1,2,5,7]]),prod(size(ω[O,N])[[1,6,4,10]]),prod(size(ω[O,N])[[5,3,4,8]]),prod(size(ω[O,N])[[2,3,6,9]])))
+
+# U_MNO= reindexdims(U[M,N,O], (1,2,5,7, 1,6,4,10, 5,3,4,8, 2,3,6,9))
+# U_MNO = reshape(U_MNO,(prod(size(U[M,N,O])[[1,2,5,7]]),prod(size(U[M,N,O])[[1,6,4,10]]),prod(size(U[M,N,O])[[5,3,4,8]]),prod(size(U[M,N,O])[[2,3,6,9]])))
+
 
 
 # Make 16 index tetrahedron, then dot in, then reshape, then squidge
-
 
 # test = pentagon_eqn( ω[M,N], U[M,N,O],U[M,N,O], ω[M,N], ω[N,O])
 # if test > 1e-9
